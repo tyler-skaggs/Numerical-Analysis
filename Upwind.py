@@ -35,8 +35,8 @@ def initial_condition1(x):
 
 def initial_condition2(x):
     f = np.zeros_like(x)
-    x_left = 1.25
-    x_right = 1.75
+    x_left = 1.75
+    x_right = 2.25
     xm = (x_right - x_left) / 2.0
     f = where((x > x_left) & (x < x_right), np.sin(np.pi * (x - x_left) / (x_right - x_left)) ** 4, f)
     return f
@@ -55,10 +55,10 @@ def analytical2(x, t, init):
 
 
 if __name__ == '__main__':
-    h = 0.01
-    k = 0.005
-    xbounds = (0, 3)
-    tbounds = (0, 2)
+    h = 0.001
+    k = h/3
+    xbounds = (0, 4)
+    tbounds = (0, 1)
     Nx = int((xbounds[1] - xbounds[0]) / h) + 1
     Nt = int((tbounds[1] - tbounds[0]) / k) + 1
     x = np.linspace(xbounds[0], xbounds[1], Nx)  # discretization of space

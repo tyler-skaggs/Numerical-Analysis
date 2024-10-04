@@ -63,20 +63,22 @@ def LaxFriedrichs(k, h, init, xbound, tbound):
 
 def initial_condition1(x):
     y = np.zeros(np.size(x))
-    ul = 0
+    ul = -0.25
     ur = 1
     for i in range(0, np.size(x)):
-        if(x[i] >= 0.5):
+        if(x[i] > 2):
             y[i] = ur
-        elif(x[i] < 0.5):
+        elif(x[i] < 2):
             y[i] = ul
+        else:
+            y[i] = 0.5
     return(y)
 
 
 def analytical1(x, t):
     y = np.zeros(np.size(x))
-    x = x - 0.5
-    ul = 0
+    x = x - 2
+    ul = -0.25
     ur = 1
     for i in range(0, np.size(x)):
         if x[i] < ul * t:
@@ -136,16 +138,16 @@ if __name__ == '__main__':
     x = np.linspace(xbounds[0], xbounds[1], Nx)  # discretization of space
     t = np.linspace(tbounds[0], tbounds[1], Nt)  # discretization of time
 
-    sol1 = LaxFriedrichs(k, h, initial_condition3, xbounds, tbounds)
-    sol2 = Richtmyer_Two_Step(k, h, initial_condition3, xbounds, tbounds)
-    sol3 = MacCormack(k, h, initial_condition3, xbounds, tbounds)
+    sol1 = LaxFriedrichs(k, h, initial_condition1, xbounds, tbounds)
+    sol2 = Richtmyer_Two_Step(k, h, initial_condition1, xbounds, tbounds)
+    sol3 = MacCormack(k, h, initial_condition1, xbounds, tbounds)
 
     plt.ion()
     figure = plt.figure()
     axis = figure.add_subplot(111)
 
-    line0, = axis.plot(x, initial_condition3(x), 'red', label='Analytical Solution')
-    line1, = axis.plot(x, sol1[:, 0], 'blue', label='Lax-Wendroff')  # Returns a tuple of line objects, thus the comma
+    line0, = axis.plot(x, initial_condition1(x), 'red', label='Analytical Solution')
+    line1, = axis.plot(x, sol1[:, 0], 'blue', label='Lax-Friedrichs')  # Returns a tuple of line objects, thus the comma
     line2, = axis.plot(x, sol2[:, 0], 'green', label='Richtmyer')  # Returns a tuple of line objects, thus the comma
     line3, = axis.plot(x, sol3[:, 0], 'orange', label='MacCormack')  # Returns a tuple of line objects, thus the comma
 
@@ -156,7 +158,7 @@ if __name__ == '__main__':
     plt.ylim(min(sol1[:, 0]) - 0.2, max(sol1[:,0]) + 0.2)
 
     for i in range(1, Nt):
-        line0.set_ydata(analytical3(x, t[i]))
+        line0.set_ydata(analytical1(x, t[i]))
         line1.set_ydata(sol1[:, i])
         line2.set_ydata(sol2[:, i])
         line3.set_ydata(sol3[:, i])
