@@ -55,7 +55,9 @@ def analytical2(x, t, init):
 
 
 if __name__ == '__main__':
-    h = 0.001
+    init = initial_condition2
+
+    h = 0.01
     k = h/3
     xbounds = (0, 4)
     tbounds = (0, 1)
@@ -78,6 +80,7 @@ if __name__ == '__main__':
 
     AnaA, AnaB = analytical2(x, 0, initial_condition2)
 
+    """ PLOTTING Solutions
     plt.ion()
     figure, axis = plt.subplots(2)
 
@@ -99,4 +102,74 @@ if __name__ == '__main__':
         line3.set_ydata(solB[:, i])
 
         figure.canvas.draw()
-        figure.canvas.flush_events()
+        figure.canvas.flush_events()"""
+
+    ## Calculating and Plotting Error
+    hvals = (.1, .05, 0.025, 0.0125, 0.00625, 0.003125, 0.0015625, 0.00078125)
+    hs = -1
+    maxerror = np.zeros((len(hvals), 3))
+
+    for h in hvals:
+        hs = hs+1
+        k = h / 2
+
+        Nx = int((xbounds[1] - xbounds[0]) / h) + 1
+        Nt = int((tbounds[1] - tbounds[0]) / k) + 1
+        x = np.linspace(xbounds[0], xbounds[1], Nx)  # discretization of space
+        t = np.linspace(tbounds[0], tbounds[1], Nt)  # discretization of time
+
+        solA, solB = upwind(A1p, A1n, init, h, k, xbounds, tbounds)
+
+
+        error_1 = np.zeros(len(t))
+        error_2 = np.zeros(len(t))
+        error_inf = np.zeros(len(t))
+
+        for i in range(0, Nt):
+            sol = np.array((solA[:,i], solB[:,i]))
+            AnaA = analytical1(x, t[i], init)[0]
+            AnaB = analytical1(x, t[i], init)[1]
+            analytical = np.array((AnaA, AnaB))
+
+            temperr = np.zeros(len(x))
+            for j in range(0, Nx):
+                temp = abs(analytical[:, j] - sol[:, j])
+                error_1[i] = error_1[i] + (abs(temp[0]) + abs(temp[1]))
+                error_2[i] = error_2[i] + pow((pow(temp[0], 2) + pow(temp[1], 2)), 1/2)
+                temperr[j] = max(abs(temp))
+
+            error_inf[i] = max(temperr)
+        error_1 = error_1 * h
+        error_2 = error_2 * h
+
+        maxerror[hs, 0] = max(error_1)
+        maxerror[hs, 1] = max(error_2)
+        maxerror[hs, 2] = max(error_inf)
+
+        print("\nMax Error when h = %f" % hvals[hs])
+        print("Upwind Errors:")
+        for i in (0, 1):
+            print("\t e_%d = %f" % (i + 1, maxerror[hs, i]))
+        print("\t e_inf = %f" % maxerror[hs, 2])
+
+    logH = np.log(hvals)
+
+    figure, axis = plt.subplots(2, 2)
+    for i in (0, 1, 2):
+        figplace1 = (0, 0, 1, 1)
+        figplace2 = (0, 1, 0, 1)
+        slope = (-np.log(maxerror[len(hvals)-1, i]) + np.log(maxerror[len(hvals)-2, i])) / (-logH[len(hvals)-1] + logH[len(hvals)-2])
+
+        axis[figplace1[i], figplace2[i]].plot(-logH, -np.log(maxerror[:, i]),
+                                              label="Error - Slope %f" % slope)
+
+        axis[figplace1[i], figplace2[i]].legend()
+        if i != 2:
+            axis[figplace1[i], figplace2[i]].set_title(r"$e_%d$" % (i + 1))
+        else:
+            axis[figplace1[i], figplace2[i]].set_title(r"$e_\infty$")
+
+    plt.show()
+
+
+
