@@ -159,10 +159,10 @@ if __name__ == '__main__':
     axis = figure.add_subplot(111)
 
     line0, = axis.plot(x, init(x), 'red', label='Analytical Solution')
-    line1, = axis.plot(x, sol1[:, 0], 'blue', label='Lax-Friedrichs')  # Returns a tuple of line objects, thus the comma
-    line2, = axis.plot(x, sol2[:, 0], 'green', label='Richtmyer')  # Returns a tuple of line objects, thus the comma
-    line3, = axis.plot(x, sol3[:, 0], 'orange', label='MacCormack')  # Returns a tuple of line objects, thus the comma
-    line4, = axis.plot(x, sol4[:, 0], 'purple', label='Upwind')  # Returns a tuple of line objects, thus the comma
+    #line1, = axis.plot(x, sol1[:, 0], 'blue', label='Lax-Friedrichs')  # Returns a tuple of line objects, thus the comma
+    #line2, = axis.plot(x, sol2[:, 0], 'green', label='Richtmyer')  # Returns a tuple of line objects, thus the comma
+    #line3, = axis.plot(x, sol3[:, 0], 'orange', label='MacCormack')  # Returns a tuple of line objects, thus the comma
+    line4, = axis.plot(x, sol4[:, 0], 'yellow', label='Upwind')  # Returns a tuple of line objects, thus the comma
 
     plt.legend()
     plt.ylabel("u(x)")
@@ -172,9 +172,9 @@ if __name__ == '__main__':
 
     for i in range(1, Nt):
         line0.set_ydata(analytical1(x, t[i]))
-        line1.set_ydata(sol1[:, i])
-        line2.set_ydata(sol2[:, i])
-        line3.set_ydata(sol3[:, i])
+        #line1.set_ydata(sol1[:, i])
+        #line2.set_ydata(sol2[:, i])
+        #line3.set_ydata(sol3[:, i])
         line4.set_ydata(sol4[:, i])
         figure.canvas.draw()
         figure.canvas.flush_events()
