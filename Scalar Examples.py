@@ -4,7 +4,10 @@ from sympy.physics.units import length
 
 
 def f(x):
-    return pow(x, 2) / 2
+    umax = 1
+    pmax = 2
+    return x * umax * (1 - x / pmax)
+    #return pow(x, 2) / 2
 
 def Upwind(k, h, init, xbound, tbound):
     Nx = int((xbound[1] - xbound[0]) / h) + 1
@@ -13,9 +16,24 @@ def Upwind(k, h, init, xbound, tbound):
     x = np.linspace(xbound[0], xbound[1], Nx)
     y = init(x)
     sol = np.zeros((Nx, Nt))
+
+    def Flux(v, w):
+        F = np.zeros(len(v))
+
+        for i in range(0, len(v)):
+            if v[i] == w[i]:
+                F[i] = f(v[i])
+            else:
+                temp = (f(v[i]) - f(w[i])) / (v[i] - w[i])
+                if temp >= 0:
+                    F[i] = f(v[i])
+                else:
+                    F[i] = f(w[i])
+        return F
+
     for t in range(0, Nt):
         sol[:, t] = y
-        y[1:-1] = y[1:-1] - k / (2*h) * (pow(y[1:-1],2) - pow(y[:-2], 2))
+        y[1:-1] = y[1:-1] - k / h * (Flux(y[1:-1], y[2:]) - Flux(y[:-2], y[1:-1]))
 
     return sol
 
@@ -72,15 +90,15 @@ def LaxFriedrichs(k, h, init, xbound, tbound):
 
 def initial_condition1(x):
     y = np.zeros(np.size(x))
-    ul = 0
-    ur = 1
+    ul = 2
+    ur = 0
     for i in range(0, np.size(x)):
-        if(x[i] > 2):
+        if(x[i] > 0):
             y[i] = ur
-        elif(x[i] < 2):
+        elif(x[i] < 0):
             y[i] = ul
         else:
-            y[i] = 0.5
+            y[i] = 1
     return(y)
 
 
@@ -132,22 +150,36 @@ def analytical3(x, t):
                 y[i] = 0
     return y
 
+def analytical_Traffic(x, t):
+    y = np.zeros(np.size(x))
+    pmax = 2
+    umax = 1
+    for i in range(0, np.size(x)):
+        if x[i] < -umax * t:
+            y[i] = pmax
+        elif x[i] > umax * t:
+            y[i] = 0
+        else:
+            y[i] = pmax / 2 * (1 - x[i] / (umax * t))
+
+    return y
 
 def initial_condition3(x):
     return analytical3(x, 0)
 
 
 if __name__ == '__main__':
+    init = initial_condition1
+
     h = 0.01
     k = 0.005
-    xbounds = (0, 6)
+    xbounds = (-6, 6)
     tbounds = (0, 4)
     Nx = int((xbounds[1] - xbounds[0]) / h) + 1
     Nt = int((tbounds[1] - tbounds[0]) / k) + 1
     x = np.linspace(xbounds[0], xbounds[1], Nx)  # discretization of space
     t = np.linspace(tbounds[0], tbounds[1], Nt)  # discretization of time
 
-    init = initial_condition1
 
     sol1 = LaxFriedrichs(k, h, init, xbounds, tbounds)
     sol2 = Richtmyer_Two_Step(k, h, init, xbounds, tbounds)
@@ -159,21 +191,24 @@ if __name__ == '__main__':
     axis = figure.add_subplot(111)
 
     line0, = axis.plot(x, init(x), 'red', label='Analytical Solution')
-    #line1, = axis.plot(x, sol1[:, 0], 'blue', label='Lax-Friedrichs')  # Returns a tuple of line objects, thus the comma
-    #line2, = axis.plot(x, sol2[:, 0], 'green', label='Richtmyer')  # Returns a tuple of line objects, thus the comma
+    line1, = axis.plot(x, sol1[:, 0], 'blue', label='Lax-Friedrichs')  # Returns a tuple of line objects, thus the comma
+    line2, = axis.plot(x, sol2[:, 0], 'green', label='Richtmyer')  # Returns a tuple of line objects, thus the comma
     #line3, = axis.plot(x, sol3[:, 0], 'orange', label='MacCormack')  # Returns a tuple of line objects, thus the comma
     line4, = axis.plot(x, sol4[:, 0], 'yellow', label='Upwind')  # Returns a tuple of line objects, thus the comma
 
     plt.legend()
-    plt.ylabel("u(x)")
+    plt.ylabel(r"$\rho(x,t)$")
     plt.xlabel("x")
-    plt.title(r"Burgers' Equation")
+    plt.title(r"Green Light Problem $\rho(x,t)$")
     plt.ylim(min(sol1[:, 0]) - 0.2, max(sol1[:,0]) + 0.2)
 
+    text = plt.text(-5, 0, "t = 0")
+
     for i in range(1, Nt):
-        line0.set_ydata(analytical1(x, t[i]))
-        #line1.set_ydata(sol1[:, i])
-        #line2.set_ydata(sol2[:, i])
+        text.set_text("t = %f" % t[i])
+        line0.set_ydata(analytical_Traffic(x, t[i]))
+        line1.set_ydata(sol1[:, i])
+        line2.set_ydata(sol2[:, i])
         #line3.set_ydata(sol3[:, i])
         line4.set_ydata(sol4[:, i])
         figure.canvas.draw()

@@ -88,13 +88,13 @@ if __name__ == '__main__':
 
     AnaA, AnaB = analytical1(x, 0, init)
 
-    """
+
     ### PLOTTING Solutions
     plt.ion()
     figure, axis = plt.subplots(2)
 
-    line0, = axis[0].plot(x, AnaA, color='red', label='Analytical Solution')
-    line1, = axis[1].plot(x, AnaB, color='red', label='Analytical Solution')
+    #line0, = axis[0].plot(x, AnaA, color='red', label='Analytical Solution')
+    #line1, = axis[1].plot(x, AnaB, color='red', label='Analytical Solution')
 
     line2, = axis[0].plot(x, solA[:, 0], color='blue', label="Numerical Solution")  # Returns a tuple of line objects, thus the comma
     axis[0].title.set_text('Equation A')
@@ -105,8 +105,8 @@ if __name__ == '__main__':
     plt.legend()
 
     for i in range(0, Nt):
-        line0.set_ydata(analytical2(x, t[i], init)[0])
-        line1.set_ydata(analytical2(x, t[i], init)[1])
+        #line0.set_ydata(analytical2(x, t[i], init)[0])
+        #line1.set_ydata(analytical2(x, t[i], init)[1])
         line2.set_ydata(solA[:, i])
         line3.set_ydata(solB[:, i])
 
@@ -260,6 +260,6 @@ if __name__ == '__main__':
             axis[figplace1[i], figplace2[i]].set_title(r"$e_\infty$")
 
     plt.show()
-
+    """
 
 
