@@ -85,8 +85,9 @@ def initial_condition2(x):
 
 if __name__ == '__main__':
     A = 1
+    init = initial_condition2
 
-    hvals = (.1, .05, 0.025, 0.0125, 0.00625, 0.003125, 0.0015625, 0.00078125)
+    hvals = (.1, 0.1/2, 0.1/4, 0.1/8, 0.1/16, 0.1/32, 0.1/64, 0.1/128, 0.1/256)
     maxerror = np.zeros((len(hvals), 3, 4))
 
     hs = -1
@@ -95,7 +96,7 @@ if __name__ == '__main__':
         k = h / 2
 
         tmin, tmax = 0, 1  # start and stop time of simulation
-        xmin, xmax = 0, 2  # start and end of spatial domain
+        xmin, xmax = 0, 4  # start and end of spatial domain
 
         solvers = [lax_wendroff, lax_friedrichs, one_sided_left]
 
@@ -109,13 +110,13 @@ if __name__ == '__main__':
         analytical = np.zeros((len(t), len(x)))  # holds the analytical solution
 
         for j, solver in enumerate(solvers):  # Solve for all solvers in list
-            u = initial_condition1(x)
+            u = init(x)
             un = np.zeros((np.size(t), np.size(x)))  # holds the numerical solution
 
             for i, tt in enumerate(t[1:]):
 
                 if j == 0:
-                    analytical[i, :] = initial_condition1(x - A * tt)  # compute analytical solution for this time step
+                    analytical[i, :] = init(x - A * tt)  # compute analytical solution for this time step
 
                 u_bc = interpolate.interp1d(x[-2:], u[-2:])  # interplate at right bndry
 
@@ -126,24 +127,23 @@ if __name__ == '__main__':
 
             solutions[j, :, :] = un
 
-        error_1 = np.zeros((len(solvers), len(t)))
-        error_2 = np.zeros((len(solvers), len(t)))
-        error_3 = np.zeros((len(solvers), len(t)))
-        error_inf = np.zeros((len(solvers), len(t)))
+        error_1 = np.zeros((len(solvers)))
+        error_2 = np.zeros((len(solvers)))
+        error_3 = np.zeros((len(solvers)))
+        error_inf = np.zeros((len(solvers)))
 
         for j in range(0, len(solvers)):
-            for i in enumerate(t):
-                temp = abs(analytical[i[0]] - solutions[j, i[0], :])
-                error_1[j, i[0]] = h*sum(temp)
-                error_2[j, i[0]] = pow(h*sum(pow(temp, 2)), 1/2)
-                error_3[j, i[0]] = pow(h*sum(pow(temp, 3)), 1/3)
-                error_inf[j, i[0]] = max(temp)
+            temp = abs(analytical[Nt-2, :] - solutions[j, Nt-2, :])
+            error_1[j] = h*sum(temp)
+            error_2[j] = pow(h*sum(pow(temp, 2)), 1/2)
+            error_3[j] = pow(h*sum(pow(temp, 3)), 1/3)
+            error_inf[j] = max(temp)
 
         for k in (0, 1, 2):
-            maxerror[hs, k, 0] = max(error_1[k, :])
-            maxerror[hs, k, 1] = max(error_2[k, :])
-            maxerror[hs, k, 2] = max(error_3[k, :])
-            maxerror[hs, k, 3] = max(error_inf[k, :])
+            maxerror[hs, k, 0] = error_1[k]
+            maxerror[hs, k, 1] = error_2[k]
+            maxerror[hs, k, 2] = error_3[k]
+            maxerror[hs, k, 3] = error_inf[k]
 
     for k in (0, 1, 2, 3):
         print("\nMax Error when h = %f" % hvals[k])
@@ -172,9 +172,9 @@ if __name__ == '__main__':
     for i in (0, 1, 2, 3):
         figplace1 = (0, 0, 1, 1)
         figplace2 = (0, 1, 0, 1)
-        LWslope = (-np.log(LWer[7, i]) + np.log(LWer[6, i])) / (-logH[7] + logH[6])
-        LFslope = (-np.log(LFer[7, i]) + np.log(LFer[6, i])) / (-logH[7] + logH[6])
-        UWslope = (-np.log(UWer[7, i]) + np.log(UWer[6, i])) / (-logH[7] + logH[6])
+        LWslope = (-np.log(LWer[len(hvals)-1, i]) + np.log(LWer[len(hvals)-2, i])) / (-logH[len(hvals)-1] + logH[len(hvals)-2])
+        LFslope = (-np.log(LFer[len(hvals)-1, i]) + np.log(LFer[len(hvals)-2, i])) / (-logH[len(hvals)-1] + logH[len(hvals)-2])
+        UWslope = (-np.log(UWer[len(hvals)-1, i]) + np.log(UWer[len(hvals)-2, i])) / (-logH[len(hvals)-1] + logH[len(hvals)-2])
 
         axis[figplace1[i], figplace2[i]].plot(-logH, -np.log(LWer[:, i]), label="Lax-Wendroff Error - Slope %f" % LWslope)
         axis[figplace1[i], figplace2[i]].plot(-logH, -np.log(LFer[:, i]), label="Lax-Fredric Error - Slope %f" % LFslope)

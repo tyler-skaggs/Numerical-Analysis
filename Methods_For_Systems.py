@@ -88,7 +88,7 @@ if __name__ == '__main__':
 
     AnaA, AnaB = analytical1(x, 0, init)
 
-
+    """
     ### PLOTTING Solutions
     plt.ion()
     figure, axis = plt.subplots(2)
@@ -116,7 +116,7 @@ if __name__ == '__main__':
     """
 
     ## Calculating and Plotting Error
-    hvals = (.1, .05, 0.025, 0.0125, 0.00625, 0.003125)#, 0.00156253, 0.00078125)
+    hvals = (.1, 0.1/2, 0.1/4, 0.1/8, 0.1/16, 0.1/32, 0.1/64, 0.1/128, 0.1/256)
     hs = -1
 
     maxerror_u = np.zeros((len(hvals), 3))
@@ -142,77 +142,63 @@ if __name__ == '__main__':
             solA_lf, solB_lf = numerical_solver(A2, A2p, A2n, init, h, k, xbounds, tbounds, "LF")
             solA_lw, solB_lw = numerical_solver(A2, A2p, A2n, init, h, k, xbounds, tbounds, "LW")
 
-        error_1_u = np.zeros(len(t))
-        error_2_u = np.zeros(len(t))
-        error_inf_u = np.zeros(len(t))
 
-        error_1_lw = np.zeros(len(t))
-        error_2_lw = np.zeros(len(t))
-        error_inf_lw = np.zeros(len(t))
+        sol_u = np.array((solA_u[:, Nt-1], solB_u[:, Nt-1]))
+        sol_lw = np.array((solA_lw[:, Nt-1], solB_lw[:, Nt-1]))
+        sol_lf = np.array((solA_lf[:, Nt-1], solB_lf[:, Nt-1]))
 
-        error_1_lf = np.zeros(len(t))
-        error_2_lf = np.zeros(len(t))
-        error_inf_lf = np.zeros(len(t))
+        if system == 1:
+            AnaA = analytical1(x, t[Nt-1], init)[0]
+            AnaB = analytical1(x, t[Nt-1], init)[1]
 
-        for i in range(0, Nt):
-            sol_u = np.array((solA_u[:,i], solB_u[:,i]))
-            sol_lw = np.array((solA_lw[:, i], solB_lw[:, i]))
-            sol_lf = np.array((solA_lf[:, i], solB_lf[:, i]))
-            if system == 1:
-                AnaA = analytical1(x, t[i], init)[0]
-                AnaB = analytical1(x, t[i], init)[1]
+        if system == 2:
+            AnaA = analytical2(x, t[Nt-1], init)[0]
+            AnaB = analytical2(x, t[Nt-1], init)[1]
 
-            if system == 2:
-                AnaA = analytical2(x, t[i], init)[0]
-                AnaB = analytical2(x, t[i], init)[1]
+        analytical = np.array((AnaA, AnaB))
 
-            analytical = np.array((AnaA, AnaB))
+        temperr_u = np.zeros(len(x))
+        temperr_lw = np.zeros(len(x))
+        temperr_lf = np.zeros(len(x))
 
-            temperr_u = np.zeros(len(x))
-            temperr_lw = np.zeros(len(x))
-            temperr_lf = np.zeros(len(x))
-            for j in range(1, Nx):
-                temp = abs(analytical[:, j] - sol_u[:, j])
-                error_1_u[i] = error_1_u[i] + (abs(temp[0]) + abs(temp[1]))
-                error_2_u[i] = error_2_u[i] + pow((pow(temp[0], 2) + pow(temp[1], 2)), 1/2)
-                temperr_u[j] = max(abs(temp))
+        error_1_u = 0
+        error_2_u = 0
+        error_1_lw = 0
+        error_2_lw = 0
+        error_1_lf = 0
+        error_2_lf = 0
 
-                temp = abs(analytical[:, j] - sol_lw[:, j])
-                error_1_lw[i] = error_1_lw[i] + (abs(temp[0]) + abs(temp[1]))
-                error_2_lw[i] = error_2_lw[i] + pow((pow(temp[0], 2) + pow(temp[1], 2)), 1 / 2)
-                temperr_lw[j] = max(abs(temp))
+        for j in range(1, Nx):
 
-                temp = abs(analytical[:, j] - sol_lf[:, j])
-                error_1_lf[i] = error_1_lf[i] + (abs(temp[0]) + abs(temp[1]))
-                error_2_lf[i] = error_2_lf[i] + pow((pow(temp[0], 2) + pow(temp[1], 2)), 1 / 2)
-                temperr_lf[j] = max(abs(temp))
+            temp = abs(analytical[:, j] - sol_u[:, j])
+            error_1_u = error_1_u + sum(temp)
+            error_2_u = error_2_u + (pow(temp[0], 2) + pow(temp[1], 2))
+            temperr_u[j] = max(abs(temp))
 
-            error_inf_u[i] = max(temperr_u)
-            error_inf_lw[i] = max(temperr_lw)
-            error_inf_lf[i] = max(temperr_lf)
+            temp = abs(analytical[:, j] - sol_lw[:, j])
+            error_1_lw = error_1_lw + sum(temp)
+            error_2_lw = error_2_lw + (pow(temp[0], 2) + pow(temp[1], 2))
+            temperr_lw[j] = max(abs(temp))
 
-        ## Scale error by choice of h
-        error_1_u = error_1_u * h
-        error_2_u = error_2_u * h
+            temp = abs(analytical[:, j] - sol_lf[:, j])
+            error_1_lf = error_1_lf + sum(temp)
+            error_2_lf = error_2_lf + (pow(temp[0], 2) + pow(temp[1], 2))
+            temperr_lf[j] = max(abs(temp))
 
-        error_1_lw = error_1_lw * h
-        error_2_lw = error_2_lw * h
-
-        error_1_lf = error_1_lf * h
-        error_2_lf = error_2_lf * h
 
         ## Finding Maximum of Error
-        maxerror_u[hs, 0] = max(error_1_u)
-        maxerror_u[hs, 1] = max(error_2_u)
-        maxerror_u[hs, 2] = max(error_inf_u)
 
-        maxerror_lw[hs, 0] = max(error_1_lw)
-        maxerror_lw[hs, 1] = max(error_2_lw)
-        maxerror_lw[hs, 2] = max(error_inf_lw)
+        maxerror_u[hs, 0] = h * error_1_u
+        maxerror_u[hs, 1] = pow(h * error_2_u, 1/2)
+        maxerror_u[hs, 2] = max(temperr_u)
 
-        maxerror_lf[hs, 0] = max(error_1_lf)
-        maxerror_lf[hs, 1] = max(error_2_lf)
-        maxerror_lf[hs, 2] = max(error_inf_lf)
+        maxerror_lw[hs, 0] = h * error_1_lw
+        maxerror_lw[hs, 1] = pow(h * error_2_lw, 1/2)
+        maxerror_lw[hs, 2] = max(temperr_lw)
+
+        maxerror_lf[hs, 0] = h * error_1_lf
+        maxerror_lf[hs, 1] = pow(h * error_2_lf, 1/2)
+        maxerror_lf[hs, 2] = max(temperr_lf)
 
         print("\nMax Error when h = %f" % hvals[hs])
         print("Upwind Errors:")
@@ -260,6 +246,6 @@ if __name__ == '__main__':
             axis[figplace1[i], figplace2[i]].set_title(r"$e_\infty$")
 
     plt.show()
-    """
+
 
 

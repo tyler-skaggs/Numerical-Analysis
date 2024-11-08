@@ -157,7 +157,7 @@ def analytical_Traffic(x, t):
     for i in range(0, np.size(x)):
         if x[i] < -umax * t:
             y[i] = pmax
-        elif x[i] > umax * t:
+        elif x[i] >= umax * t:
             y[i] = 0
         else:
             y[i] = pmax / 2 * (1 - x[i] / (umax * t))
@@ -173,15 +173,15 @@ if __name__ == '__main__':
 
     h = 0.01
     k = 0.005
-    xbounds = (-6, 6)
-    tbounds = (0, 4)
+    xbounds = (-3, 3)
+    tbounds = (0, 1)
     Nx = int((xbounds[1] - xbounds[0]) / h) + 1
     Nt = int((tbounds[1] - tbounds[0]) / k) + 1
     x = np.linspace(xbounds[0], xbounds[1], Nx)  # discretization of space
     t = np.linspace(tbounds[0], tbounds[1], Nt)  # discretization of time
 
 
-    sol1 = LaxFriedrichs(k, h, init, xbounds, tbounds)
+    """sol1 = LaxFriedrichs(k, h, init, xbounds, tbounds)
     sol2 = Richtmyer_Two_Step(k, h, init, xbounds, tbounds)
     sol3 = MacCormack(k, h, init, xbounds, tbounds)
     sol4 = Upwind(k, h, init, xbounds, tbounds)
@@ -213,4 +213,101 @@ if __name__ == '__main__':
         line4.set_ydata(sol4[:, i])
         figure.canvas.draw()
         figure.canvas.flush_events()
+"""
+    ## Calculating and Plotting Error
+    hvals = (.1, .05, 0.025, 0.0125, 0.00625, 0.003125)  # , 0.00156253, 0.00078125)
+    hs = -1
 
+    maxerror_u = np.zeros((len(hvals), 3))
+    maxerror_lf = np.zeros((len(hvals), 3))
+    maxerror_R = np.zeros((len(hvals), 3))
+
+    for h in hvals:
+        hs = hs + 1
+        k = h / 3
+
+        Nx = int((xbounds[1] - xbounds[0]) / h) + 1
+        Nt = int((tbounds[1] - tbounds[0]) / k) + 1
+        x = np.linspace(xbounds[0], xbounds[1], Nx)  # discretization of space
+        t = np.linspace(tbounds[0], tbounds[1], Nt)  # discretization of time
+
+
+        error_1_u = np.zeros(len(t))
+        error_2_u = np.zeros(len(t))
+        error_inf_u = np.zeros(len(t))
+
+        error_1_R = np.zeros(len(t))
+        error_2_R = np.zeros(len(t))
+        error_inf_R = np.zeros(len(t))
+
+        error_1_lf = np.zeros(len(t))
+        error_2_lf = np.zeros(len(t))
+        error_inf_lf = np.zeros(len(t))
+
+
+        sol_lf = LaxFriedrichs(k, h, init, xbounds, tbounds)
+        sol_R = Richtmyer_Two_Step(k, h, init, xbounds, tbounds)
+        sol_u = Upwind(k, h, init, xbounds, tbounds)
+
+
+        tempu = abs(analytical_Traffic(x, t[Nt-1]) - sol_u[:,Nt-1])
+        templf = abs(analytical_Traffic(x, t[Nt-1]) - sol_lf[:, Nt-1])
+        tempr = abs(analytical_Traffic(x, t[Nt-1]) - sol_R[:, Nt-1])
+
+        maxerror_u[hs, 0] = h * sum(tempu)
+        maxerror_u[hs, 1] = pow(h * sum(pow(tempu, 2)), 1/2)
+        maxerror_u[hs, 2] = max(tempu)
+
+        maxerror_lf[hs, 0] = h * sum(templf)
+        maxerror_lf[hs, 1] = pow(h *sum(pow(templf, 2)), 1 / 2)
+        maxerror_lf[hs, 2] = max(templf)
+
+        maxerror_R[hs, 0] = h * sum(tempr)
+        maxerror_R[hs, 1] = pow(h * sum(pow(tempr, 2)), 1 / 2)
+        maxerror_R[hs, 2] = max(tempr)
+
+        print("\nMax Error when h = %f" % hvals[hs])
+        print("Upwind Errors:")
+        for i in (0, 1):
+            print("\t e_%d = %f" % (i + 1, maxerror_u[hs, i]))
+        print("\t e_inf = %f" % maxerror_u[hs, 2])
+
+        print("Lax Friedrichs Errors:")
+        for i in (0, 1):
+            print("\t e_%d = %f" % (i + 1, maxerror_lf[hs, i]))
+        print("\t e_inf = %f" % maxerror_lf[hs, 2])
+
+        print("Ritchmeyer Errors:")
+        for i in (0, 1):
+            print("\t e_%d = %f" % (i + 1, maxerror_R[hs, i]))
+        print("\t e_inf = %f" % maxerror_R[hs, 2])
+
+    logH = np.log(hvals)
+
+    figure, axis = plt.subplots(2, 2)
+
+    for i in (0, 1, 2):
+        figplace1 = (0, 0, 1, 1)
+        figplace2 = (0, 1, 0, 1)
+
+        slope_u = (-np.log(maxerror_u[len(hvals) - 1, i]) + np.log(maxerror_u[len(hvals) - 2, i])) / (
+                -logH[len(hvals) - 1] + logH[len(hvals) - 2])
+        slope_lf = (-np.log(maxerror_lf[len(hvals) - 1, i]) + np.log(maxerror_lf[len(hvals) - 2, i])) / (
+                -logH[len(hvals) - 1] + logH[len(hvals) - 2])
+        slope_R = (-np.log(maxerror_R[len(hvals) - 1, i]) + np.log(maxerror_R[len(hvals) - 2, i])) / (
+                -logH[len(hvals) - 1] + logH[len(hvals) - 2])
+
+        axis[figplace1[i], figplace2[i]].plot(-logH, -np.log(maxerror_u[:, i]),
+                                                  label="Up_Error - Slope %f" % slope_u)
+        axis[figplace1[i], figplace2[i]].plot(-logH, -np.log(maxerror_lf[:, i]),
+                                                  label="LF_Error - Slope %f" % slope_lf)
+        axis[figplace1[i], figplace2[i]].plot(-logH, -np.log(maxerror_R[:, i]),
+                                                 label="R_Error - Slope %f" % slope_R)
+
+        axis[figplace1[i], figplace2[i]].legend()
+        if i != 2:
+            axis[figplace1[i], figplace2[i]].set_title(r"$e_%d$" % (i + 1))
+        else:
+            axis[figplace1[i], figplace2[i]].set_title(r"$e_\infty$")
+
+    plt.show()
