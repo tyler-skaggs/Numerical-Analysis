@@ -62,13 +62,13 @@ def analytical2(x, t, init):
 
 
 if __name__ == '__main__':
-    system = 2
-    init = initial_condition2
+    system = 1
+    init = initial_condition1
 
     h = 0.01
     k = h/3
-    xbounds = (0, 6)
-    tbounds = (0, 0.5)
+    xbounds = (0, 4)
+    tbounds = (0, 0.1)
     Nx = int((xbounds[1] - xbounds[0]) / h) + 1
     Nt = int((tbounds[1] - tbounds[0]) / k) + 1
     x = np.linspace(xbounds[0], xbounds[1], Nx)  # discretization of space
@@ -116,16 +116,17 @@ if __name__ == '__main__':
     """
 
     ## Calculating and Plotting Error
-    hvals = (.1, 0.1/2, 0.1/4, 0.1/8, 0.1/16, 0.1/32, 0.1/64, 0.1/128, 0.1/256)
+    hvals = (.1, 0.1/2, 0.1/4, 0.1/8, 0.1/16, 0.1/32, 0.1/64, 0.1/128, 0.1/256)#, 0.1/512)
     hs = -1
 
     maxerror_u = np.zeros((len(hvals), 3))
     maxerror_lw = np.zeros((len(hvals), 3))
     maxerror_lf = np.zeros((len(hvals), 3))
 
+    #hvals = (0.25, 0.125)
     for h in hvals:
         hs = hs+1
-        k = h / 3
+        k = h / 2
 
         Nx = int((xbounds[1] - xbounds[0]) / h) + 1
         Nt = int((tbounds[1] - tbounds[0]) / k) + 1
@@ -146,6 +147,7 @@ if __name__ == '__main__':
         sol_u = np.array((solA_u[:, Nt-1], solB_u[:, Nt-1]))
         sol_lw = np.array((solA_lw[:, Nt-1], solB_lw[:, Nt-1]))
         sol_lf = np.array((solA_lf[:, Nt-1], solB_lf[:, Nt-1]))
+
 
         if system == 1:
             AnaA = analytical1(x, t[Nt-1], init)[0]
@@ -187,7 +189,6 @@ if __name__ == '__main__':
 
 
         ## Finding Maximum of Error
-
         maxerror_u[hs, 0] = h * error_1_u
         maxerror_u[hs, 1] = pow(h * error_2_u, 1/2)
         maxerror_u[hs, 2] = max(temperr_u)
@@ -200,7 +201,7 @@ if __name__ == '__main__':
         maxerror_lf[hs, 1] = pow(h * error_2_lf, 1/2)
         maxerror_lf[hs, 2] = max(temperr_lf)
 
-        print("\nMax Error when h = %f" % hvals[hs])
+        """print("\nMax Error when h = %f" % hvals[hs])
         print("Upwind Errors:")
         for i in (0, 1):
             print("\t e_%d = %f" % (i + 1, maxerror_u[hs, i]))
@@ -214,7 +215,7 @@ if __name__ == '__main__':
         print("Lax Wendroff Errors:")
         for i in (0, 1):
             print("\t e_%d = %f" % (i + 1, maxerror_lw[hs, i]))
-        print("\t e_inf = %f" % maxerror_lw[hs, 2])
+        print("\t e_inf = %f" % maxerror_lw[hs, 2])"""
 
     logH = np.log(hvals)
 

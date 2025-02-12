@@ -85,9 +85,9 @@ def initial_condition2(x):
 
 if __name__ == '__main__':
     A = 1
-    init = initial_condition2
+    init = initial_condition1
 
-    hvals = (.1, 0.1/2, 0.1/4, 0.1/8, 0.1/16, 0.1/32, 0.1/64, 0.1/128, 0.1/256)
+    hvals = (.1, 0.1/2, 0.1/4, 0.1/8, 0.1/16, 0.1/32, 0.1/64, 0.1/128, 0.1/256, 0.1/512, 0.1/1024)
     maxerror = np.zeros((len(hvals), 3, 4))
 
     hs = -1
@@ -96,7 +96,7 @@ if __name__ == '__main__':
         k = h / 2
 
         tmin, tmax = 0, 1  # start and stop time of simulation
-        xmin, xmax = 0, 4  # start and end of spatial domain
+        xmin, xmax = -1, 4 # start and end of spatial domain
 
         solvers = [lax_wendroff, lax_friedrichs, one_sided_left]
 
