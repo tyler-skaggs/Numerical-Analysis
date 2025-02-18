@@ -151,13 +151,13 @@ if __name__ == '__main__':
     global a
     a = 0.5
 
-    analytic = analyticalBL
+    analytic = analytical2
     def init(x):
         return analytic(x, 0)
 
     #init = initial_sin
-    problem = BL
-    deriv = BL_prime
+    problem = burgers
+    deriv = burgers_prime
     plot = 1
 
     h = 0.005
