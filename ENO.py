@@ -1,4 +1,5 @@
 import numpy as np
+from sympy import *
 
 ### This code is based on https://github.com/chairmanmao256/ENO-Linear-advection/blob/main/ENO.py
 

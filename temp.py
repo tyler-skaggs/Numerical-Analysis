@@ -1,5 +1,8 @@
+import numpy as np
+from numba.core.ir_utils import visit_vars
 from Solvers import solver
 import matplotlib.pyplot as plt
+from sympy import *
 from numpy import where
 from ENO import *
 
