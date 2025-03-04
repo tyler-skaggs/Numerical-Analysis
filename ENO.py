@@ -1,298 +1,382 @@
 import numpy as np
-from numba.core.ir_utils import visit_vars
-from Solvers import solver
-import matplotlib.pyplot as plt
-from sympy import *
-from numpy import where
 
-def burgers(x):
-    return pow(x, 2) / 2
+### This code is based on https://github.com/chairmanmao256/ENO-Linear-advection/blob/main/ENO.py
 
-def burgers_prime(x):
-    return x
+class ENO:
+    '''
+    ### Description
 
-def divided_difference(f, u, x):
-    if len(u) == 1:
-        return f(u)
-    else:
-        return ( divided_difference(f, u[1:], x[1:]) - divided_difference(f, u[:-1], x[:-1])) / (x[-1] - x[0])
+    The class to solve the 1-D linear advection equation using ENO
+    reconstruction scheme of order 3.
+    '''
 
-def RK_TVD3(u, dx, L):
-    u0 = u[0]
-    for i in range(1, len(u[:, 0])):
-        u1 = u0 + dx * L @ u0
-        u2 = u0 + 1/4 * dx * L @ u0 + 1/4 * dx * L @ u1
-        u[i, 1:-1] = (u0 + 1/6 * dx * L @ u0 + 1/6 *dx * L @ u1 + 2/3 * dx * L @ u2)[1:-1]
-        u0 = u[i]
-    return u
+    def __init__(self, l, r, dx, dt, problem, deriv, init, order=3):
+        '''
+        ### Description
+        Initialize the ENO_advection class with:
 
+        `a`: The convection speed. Default value is 1.0.
+        `ni`: The number of internal cells. Default value is 100.
+        '''
 
-def analytical2(x, t):
-    y = np.zeros(np.size(x))
-    ul = 1
-    ur = 0
-    s = (ul + ur)/2
+        self.order = order
+        self.ib = order - 1  # k-th order scheme requires k-1 ghost cells
+        self.ni = int((r - l) / dx) + 1
+        self.im = self.ni + self.ib  # to iterate through all the internal cells: for i in range(ib, im)
+        self.f = problem
+        self.init = init
+        self.delx = dx
+        self.dt = dt
 
-    for i in range(0, np.size(x)):
-        if x[i] <= s * t:
-            y[i] = ul
-        else:
-            y[i] = ur
-    return y
+        self.u = np.zeros(2 * self.ib + self.ni)  # solution vector
+        self.u_m = np.zeros_like(self.u)  # stores the middle step (previous solution) in Runge-Kutta scheme
 
-def initial_smooth(x):
-    f = np.zeros_like(x)
-    x_left = 0.25
-    x_right = 0.75
-    xm = (x_right - x_left) / 2.0
-    f = where((x > x_left) & (x < x_right), np.sin(np.pi * (x - x_left) / (x_right - x_left)) ** 4, f)
-    return f
+        ib = self.ib
+        self.xc = np.linspace(l - ib * self.delx, r + ib * self.delx, 2 * self.ib + self.ni)
 
-def analytic_linear_smooth(x, t):
-    return initial_smooth(x - a * t)
+        self.a = max(abs(deriv(self.xc)))
 
-
-
-def ENO_ROE(dt, dx, init, xbounds, tbounds, f, fprime, name = "ROE"):
-    # ------------ Set-Up ------------------------------
-    order = 3
-    Nx = int((xbounds[1] - xbounds[0]) / dx) + 1
-    Nt = int((tbounds[1] - tbounds[0]) / dt) + 1
-    NN = Nx + (order - 1) * 2
-    sol = np.zeros((NN, Nt))
-    xx = np.linspace(xbounds[0] - (order - 1) * dx, xbounds[1] + (order - 1) * dx, NN)
-    sol[:, 0] = init(xx)
-    ib = order - 1
-    im = Nx + ib
-
-    alpha = 1  # max(abs(fprime(xx[(order-1):(1-order)])))
-
-    # ------------ Start iteration through time --------
-    for t in range(1, Nt):
         # interface values
-        u = sol[:, t - 1]
-        ul = np.zeros(2 * ib + Nx + 1)
-        ur = np.zeros(2 * ib + Nx + 1)
-        u_m = u.copy()
+        self.ul = np.zeros(2 * self.ib + self.ni + 1)
+        self.ur = np.zeros(2 * self.ib + self.ni + 1)
+        self.flux = np.zeros(2 * self.ib + self.ni + 1)
 
-        for j in range(0, 3):
-            # Divided Difference, only needs to go as deep as the order of the method
-            divided_diff = np.zeros((NN + 1, order+1))
-            divided_diff[0:NN, 0] = u.copy()
-            for k in range(1, order+1):
-                divided_diff[0:NN - k, k] = (divided_diff[1:NN - (k - 1), k - 1] - divided_diff[0:NN - k, k - 1])
-            ### ----------- ENO Reconstruction -----------------------
-            for i in range(ib, im):
-                # Make Stencil using x_i and x_(i+1)
-                Roe_Speed = (f(u[i+1])- f(u[i]))/(u[i+1] - u[i])
-                if Roe_Speed >= 0:
-                    stencil = np.array([i-1, i])
+        # Newton's devided difference
+        self.V = np.zeros((2 * self.ib + self.ni + 1, 3))
+        self.global_t = 0.0
+
+    def set_initial(self):
+        '''
+        ### Description
+
+        Set the initial condition
+        '''
+        self.u = self.init(self.xc)
+
+    def set_ghost(self):
+        '''
+        ### Description
+
+        Set the value in the boundary ghost cells
+        '''
+
+
+
+    def NDD(self):
+        '''
+        ### Description
+
+        Compute the Newton Divde Difference of the function value array.
+        Function value array is stored on the cell centers.
+
+            +--------+
+            |        |
+        i> |  u[i]  | <i+1
+            |        |
+            +--------+
+
+        ib is the starting index of the internal cells. It also equals to
+        the ghost cells used.
+
+        We only compute the the Diveded Difference to the order 3:
+        V[x_{i-1/2}, x_{i+1/2}, x_{i+3/2}, x_{i+5/2}]
+
+        We also assume uniform cell length: \Delta x = const.
+        '''
+        nn = self.u.shape[0]  # total number of cells, including the ghost cells
+
+        self.V = np.zeros((nn + 1, self.order))
+        self.V[0:nn, 0] = self.u.copy()  # order-1: V[x_{i-1/2}, x_{i+1/2}]
+
+        for k in range(1, self.order):
+            self.V[0:nn - k, k] = self.V[1:nn - (k - 1), k - 1] - self.V[0:nn - k, k - 1]  # order-(k+1): V[x_{i-1/2}, x_{i+1/2},..., x_{i+k+1/2}]
+        # self.V[0:nn-2, 2] = self.V[1:nn-1, 1] - self.V[0:nn-2, 1]      # order-3: V[x_{i-1/2}, x_{i+1/2}, x_{i+3/2}, x_{i+5/2}]
+
+    def ENO_weight(self, r: int):
+        '''
+        ### Description:
+
+        Compute the ENO weight based on the left shift of the stencil
+        '''
+        crj = np.zeros(self.order)
+        for j in range(self.order):
+            for m in range(j + 1, self.order + 1):
+                de = 1.0
+                no = 0.0
+                for l in range(self.order + 1):
+                    if l != m:
+                        de = de * (m - l)
+
+                for l in range(self.order + 1):
+                    if l != m:
+                        ee = 1.0
+                        for q in range(self.order + 1):
+                            if q != m and q != l:
+                                ee *= (r - q + 1)
+                        no += ee
+
+                crj[j] += float(no) / float(de)
+
+        return crj
+
+    def ENO_reconstruction(self):
+        '''
+        ### Description:
+
+        Perform ENO reconstruction cell-wise
+        '''
+        ib, im = self.ib, self.im
+        # compute the NDD first
+        self.NDD()
+
+        # reconstruct on internal cell faces, cell by cell
+        for i in range(ib, im):
+            # initial stencil
+            stencil = np.array([i, i + 1])
+            for k in range(self.order - 1):  # the number of interfaces in the stencil: k+2
+                L, R = stencil[0], stencil[-1]
+
+                # determine the expanded stencil by evaluating NDD
+                stencilL = np.append(L - 1, stencil)
+                stencilR = np.append(stencil, R + 1)
+
+                V2L = self.V[stencilL[0], k + 1]  # note that subscript k+1 retrives order k+2 diveded difference
+                V2R = self.V[stencilR[0], k + 1]
+
+                if abs(V2L) < abs(V2R):
+                    stencil = stencilL.copy()
                 else:
-                    stencil = np.array([i, i+1])
+                    stencil = stencilR.copy()
 
-                z = symbols('z')
-                Q = f(u[stencil[0]])*(z - xx[stencil[0]])
-                for k in range(0, order):  # The number of interfaces in the stencil: k + 2
-                    L, R = stencil[0], stencil[-1]
+            # final stencil is now stored in `stencil`. Evaluate the stencil shift.
+            '''
+            +-------------+-------------+------------+
+            |             |< i          |            |
+            |< stencil[0] |< stencil[1] |< stencil[2]|
+            |             |             |            |
+            +-------------+-------------+------------+
+             ^center used  ^center used   ^center used
 
-                    stencilL = np.append(L - 1, stencil)
-                    stencilR = np.append(stencil, R + 1)
+            The plot above is an example of 3rd-order stencil, where the left shift r = 1.
+            '''
+            r = i - stencil[0]
 
-                    a = 1/(k+1) * divided_diff[stencilL[0], k + 1]
-                    b = 1/(k+1) * divided_diff[stencilR[0], k + 1]
+            # obtain the ENO weight
+            cL = self.ENO_weight(r)
+            cR = self.ENO_weight(r - 1)
 
-                    if np.abs(a) < np.abs(b):
-                        prod = 1
-                        c = b
-                        for l in stencil:
-                            prod = prod * (z - (xx[l-1] + dx))
+            # obtain the cell-center values
+            vv = self.u[stencil[0:-1]]
 
-                        stencil = stencilL.copy()
-                    else:
-                        prod = 1
-                        c = a
-                        for l in stencil:
-                            prod = prod * (z - (xx[l-1] + dx))
+            self.ul[i + 1] = cL @ vv
+            self.ur[i] = cR @ vv
 
-                        stencil = stencilR.copy()
-
-                    Q = Q + c * prod
-
-                Q_prime = lambdify(z, Q.diff(z))
-
-                ul[i + 1] = Q_prime(xx[i] + dx)
-                ur[i] = Q_prime(xx[i] + dx)
-
-            ul[ib] = ul[im]
-            ur[im] = ur[ib]
-
-            L = ul + ur
-
-            ### RK Approximation
-            alpha1 = [1.0, 3.0 / 4.0, 1.0 / 3.0]
-            alpha2 = [0.0, 1.0 / 4.0, 2.0 / 3.0]
-            alpha3 = [1.0, 1.0 / 4.0, 2.0 / 3.0]
-            u[ib:im] = alpha1[j] * u_m[ib:im] + alpha2[j] * u[ib:im] - alpha3[j] * dt / dx * (
-                        L[ib + 1:im + 1] - L[ib:im])
-
-            """u1 = u0 + dx * (flux[ib+1:im+1] - flux[ib:im])
-               u2 = 3/4 * u0 + 1/4 * u1 + 1/4 * dx * (flux[ib+1:im+1] - flux[ib:im])
-               u[ib:im] = 1/3 * u0 + 2/3 * u2 + 2/3 * dx * (flux[ib+1:im+1] - flux[ib:im])"""
-
-        sol[ib:im, t] = u[ib:im]
-
-    return sol[ib:im, :]
+        # set the boundary state by using periodic condition
+        self.ul[ib] = self.ENO_weight(-1) @ self.u[ib-1:ib + 2]
+        self.ur[im] = self.ENO_weight(0) @ self.u[im - 1: im+2]
 
 
-def ENO(dt, dx, init, xbounds, tbounds, f, fprime, name = "ENO"):
-    # ------------ Set-Up ------------------------------
-    order = 3
-    Nx = int((xbounds[1] - xbounds[0]) / dx) + 1
-    Nt = int((tbounds[1] - tbounds[0]) / dt) + 1
-    NN = Nx + (order - 1) * 2
-    sol = np.zeros((NN, Nt))
-    xx = np.linspace(xbounds[0] - (order-1)*dx, xbounds[1] + (order-1)*dx, NN)
-    sol[:, 0] = init(xx)
-    ib = order - 1
-    im = Nx + ib
+    def LAX_flux(self):
+        '''
+        ### Description
 
-    alpha = max(abs(fprime(xx[(order-1):(1-order)])))
+        Compute the L-F flux based on the reconstructed values
+        '''
+        self.flux = 1/2 * (self.f(self.ul) + self.f(self.ur) - self.a * (self.ur - self.ul))
 
-    # ------------ Start iteration through time --------
-    for t in range(1, Nt):
+    def Runge_Kutta(self):
+        self.u_m = self.u.copy()
+
+        alpha1 = [1.0, 3.0 / 4.0, 1.0 / 3.0]
+        alpha2 = [0.0, 1.0 / 4.0, 2.0 / 3.0]
+        alpha3 = [1.0, 1.0 / 4.0, 2.0 / 3.0]
+
+        for j in range(3):
+            self.set_ghost()
+            self.ENO_reconstruction()
+            self.LAX_flux()
+            self.u[self.ib:self.im] = alpha1[j] * self.u_m[self.ib:self.im] + alpha2[j] * self.u[self.ib:self.im] - \
+                                      alpha3[j] * self.dt / self.delx * (
+                                                  self.flux[self.ib + 1:self.im + 1] - self.flux[self.ib:self.im])
+
+        self.global_t += self.dt
+        return self.dt
+
+class EENO:
+    '''
+    ### Description
+
+    The class to solve the 1-D linear advection equation using ENO
+    reconstruction scheme of order 3.
+    '''
+
+    def __init__(self, l, r, dx, dt, problem, deriv, init, order=3):
+        '''
+        ### Description
+        Initialize the ENO_advection class with:
+
+        `a`: The convection speed. Default value is 1.0.
+        `ni`: The number of internal cells. Default value is 100.
+        '''
+
+        self.order = order
+        self.ib = 5  # k-th order scheme requires k+2 ghost cells
+        self.ni = int((r - l) / dx) + 1
+        self.im = self.ni + self.ib  # to iterate through all the internal cells: for i in range(ib, im)
+        self.f = problem
+        self.init = init
+        self.dx = dx
+        self.dt = dt
+        self.m = 2
+
+        self.u = np.zeros(2 * self.ib + self.ni)  # solution vector
+        self.u_m = np.zeros_like(self.u)  # stores the middle step (previous solution) in Runge-Kutta scheme
+
+        ib = self.ib
+        self.xc = np.linspace(l - ib * self.dx, r + ib * self.dx, 2 * self.ib + self.ni)
+
+        self.alpha = max(abs(deriv(self.xc)))
+
         # interface values
-        u = sol[:, t-1]
-        ul = np.zeros(2 * ib + Nx + 1)
-        ur = np.zeros(2 * ib + Nx + 1)
+        self.p_plus = np.zeros(2 * self.ib + self.ni + 1)
+        self.p_minus = np.zeros(2 * self.ib + self.ni + 1)
+        self.f_hat = np.zeros(2 * self.ib + self.ni + 1)
+        self.flux = np.zeros(self.ni)
 
-        # Find Crj vals for v_i+1/2 in ENO Scheme. Based on formula 2.20 in https://www3.nd.edu/~zxu2/acms60790S13/Shu-WENO-notes.pdf
-        def crj_val(r):
-            crj = np.zeros(order)
-            for j in range(0, order):
-                for m in range(j + 1, order + 1):
-                    de = 1.0
-                    no = 0.0
-                    for l in range(order + 1):
-                        if l != m:
-                            de = de * (m - l)
+        # Newton's divided difference
+        self.VPlus = np.zeros((2 * self.ib + self.ni + 1, 2*self.m+2))
+        self.VMinus = np.zeros((2 * self.ib + self.ni + 1, 2*self.m+2))
 
-                    for l in range(order + 1):
-                        if l != m:
-                            ee = 1.0
-                            for q in range(order + 1):
-                                if q != m and q != l:
-                                    ee *= (r - q + 1)
-                            no += ee
+        self.global_t = 0.0
 
-                    crj[j] += float(no) / float(de)
-            return crj
+    def set_initial(self):
+        '''
+        ### Description
 
-        # Divided Difference, only needs to go as deep as the order of the method
+        Set the initial condition
+        '''
+        self.u = self.init(self.xc)
 
 
-        u_m = u.copy()
-        for j in range(0, 3):
-            divided_diff = np.zeros((NN + 1, order))
-            divided_diff[0:NN, 0] = u.copy()
-            for k in range(1, order):
-                divided_diff[0:NN - k, k] = divided_diff[1:NN - (k - 1), k - 1] - divided_diff[0:NN - k, k - 1]
-            ### ----------- ENO Reconstruction -----------------------
-            for i in range(ib, im):
-                # Make Stencil using x_i and x_(i+1)
-                stencil = np.array([i, i+1])
-                for k in range(0, order - 1): # The number of interfaces in the stencil: k + 2
-                    L, R = stencil[0], stencil[-1]
+    def NDD(self):
+        '''
+        ### Description
 
-                    stencilL = np.append(L-1, stencil)
-                    stencilR = np.append(stencil, R+1)
+        Compute the Newton Divde Difference of the function value array.
+        Function value array is stored on the cell centers.
 
-                    a = divided_diff[stencilL[0], k+1]
-                    b = divided_diff[stencilR[0], k+1]
+            +--------+
+            |        |
+        i> |  u[i]  | <i+1
+            |        |
+            +--------+
 
-                    if np.abs(a) < np.abs(b):
-                        stencil = stencilL.copy()
-                    else:
-                        stencil = stencilR.copy()
+        ib is the starting index of the internal cells. It also equals to
+        the ghost cells used.
 
-                r = i - stencil[0] # How far a shift left is the stencil?
+        We only compute the Diveded Difference to the order 3:
+        V[x_{i-1/2}, x_{i+1/2}, x_{i+3/2}, x_{i+5/2}]
 
-                cL = crj_val(r)
-                cR = crj_val(r-1)
+        We also assume uniform cell length: \Delta x = const.
+        '''
+        nn = self.u.shape[0]  # total number of cells, including the ghost cells
 
-                v = u[stencil[0:-1]]
+        self.VPlus = np.zeros((nn + 1, 2*self.m+2))
+        self.VPlus[0:nn, 0] = 1/2*(self.f(self.u.copy()) + self.alpha * self.u.copy())
 
-                ul[i+1] = cL @ v
-                ur[i] = cR @ v
+        self.VMinus = np.zeros((nn + 1, 2*self.m+2))
+        self.VMinus[0:nn, 0] = 1/2*(self.f(self.u.copy()) - self.alpha * self.u.copy())
 
-            ul[ib] = ul[im] #crj_val(2) @ u[ib-1:ib + 2]
-            ur[im] = crj_val(-1) @ u[im - 1: im+2]
+        for k in range(1, 2 * self.m + 1):
+            self.VPlus[0:nn - k, k] = (self.VPlus[1:nn - (k - 1), k - 1] - self.VPlus[0:nn - k, k - 1]) / (k*self.dx)
+            self.VMinus[0:nn - k, k] = (self.VMinus[1:nn - (k - 1), k - 1] - self.VMinus[0:nn - k, k - 1]) / (k*self.dx)
+            # order-(k+1): V[x_{i-1/2}, x_{i+1/2},..., x_{i+k+1/2}]
+
+    def ENO_reconstruction(self):
+        '''
+        ### Description:
+
+        Perform ENO reconstruction cell-wise
+        '''
+        ib, im = self.ib, self.im
+        # compute the NDD first
+        self.NDD()
+
+        # reconstruct on internal cell faces, cell by cell
+        for j in range(ib-1, im+1):
+            # initial stencil
+            k_P = np.array([j])
+            k_M = np.array([j+1])
+
+            Q_Plus = 1/2 * (self.f(self.u[j]) + self.alpha * self.u[j])
+            Q_Minus = 1/2 * (self.f(self.u[j+1]) - self.alpha * self.u[j+1])
+
+            for n in range(2*self.m+1):  # the number of interfaces in the stencil
+                ### For Q_plus
+                a = self.VPlus[k_P[0], n + 1]  # note that subscript n+1 retrives order n+2 divided difference
+                b = self.VPlus[k_P[0]-1, n + 1]
+                prod = 1
+
+                if abs(a) < abs(b):
+                    c = a
+                    for k in k_P:
+                        prod *= (self.xc[j] - self.xc[k] + self.dx/2)
+                    k_P = np.append(k_P, k_P[-1] + 1)
+                else:
+                    c = b
+                    for k in k_P:
+                        prod *= (self.xc[j] - self.xc[k] + self.dx/2)
+                    k_P = np.append(k_P[0]-1, k_P)
+
+                Q_Plus += c * prod
+
+                ### For Q_minus
+                a = self.VMinus[k_M[0], n + 1]  # note that subscript n+1 retrives order n+2 divided difference
+                b = self.VMinus[k_M[0] - 1, n + 1]
+                prod = 1
+
+                if abs(a) < abs(b):
+                    c = a
+                    for k in k_M:
+                        prod *= (self.xc[j] - self.xc[k] + self.dx/2)
+                    k_M = np.append(k_M, k_M[-1] + 1)
+                else:
+                    c = b
+                    for k in k_M:
+                        prod *= (self.xc[j] - self.xc[k] + self.dx/2)
+                    k_M = np.append(k_M[0] - 1, k_M)
+
+                Q_Minus += c * prod
+
+            self.p_plus[j] = Q_Plus
+            self.p_minus[j] = Q_Minus
+
+            self.f_hat[j] = Q_Plus + Q_Minus
+
+        # set the boundary state by using periodic condition
 
 
-            flux = 1/2 * (f(ul) + f(ur) - alpha * (ur - ul))
+    def approx_flux(self):
+        '''
+        ### Description
 
-            ### RK Approximation
-            alpha1 = [1.0, 3.0 / 4.0, 1.0 / 3.0]
-            alpha2 = [0.0, 1.0 / 4.0, 2.0 / 3.0]
-            alpha3 = [1.0, 1.0 / 4.0, 2.0 / 3.0]
-            u[ib:im] = alpha1[j] * u_m[ib:im] + alpha2[j] * u[ib:im] - alpha3[j] * dt / dx * (flux[ib + 1:im + 1] - flux[ib:im])
+        Compute the L-F flux based on the reconstructed values
+        '''
+        self.flux = self.f_hat[self.ib:self.im] - self.f_hat[(self.ib-1):(self.im-1)]
 
-            """u1 = u0 + dx * (flux[ib+1:im+1] - flux[ib:im])
-               u2 = 3/4 * u0 + 1/4 * u1 + 1/4 * dx * (flux[ib+1:im+1] - flux[ib:im])
-               u[ib:im] = 1/3 * u0 + 2/3 * u2 + 2/3 * dx * (flux[ib+1:im+1] - flux[ib:im])"""
 
-        sol[ib:im, t] = u[ib:im]
+    def Runge_Kutta(self):
+        self.u_m = self.u.copy()
 
-    return sol[ib:im, :]
+        alpha1 = [1.0, 3.0 / 4.0, 1.0 / 3.0]
+        alpha2 = [0.0, 1.0 / 4.0, 2.0 / 3.0]
+        alpha3 = [1.0, 1.0 / 4.0, 2.0 / 3.0]
 
-if __name__ == '__main__':
-    analytic = analytical2
+        for j in range(3):
+            self.ENO_reconstruction()
+            self.approx_flux()
+            self.u[self.ib:self.im] = alpha1[j] * self.u_m[self.ib:self.im] + alpha2[j] * self.u[self.ib:self.im] - \
+                                      alpha3[j] * self.dt / self.dx * self.flux
 
-    def init(x):
-        return 1/4 + 1/2*np.sin(np.pi * x)
-
-    problem = burgers
-    deriv = burgers_prime
-
-    dx = 1/50
-    dt = 1/50
-
-    a = -1
-    b = 1
-    time = 1 #2/np.pi
-
-    Nx = int((b-a) / dx) + 1
-    Nt = int(time / dt) + 1
-
-    x = np.linspace(a,b,Nx)
-    t = np.linspace(0, time, Nt)
-
-    solENO = ENO(dt, dx, init, (a,b), (0,time), problem, deriv)
-    #solENO_ROE = ENO_ROE(dt, dx, init, (a, b), (0, time), problem, deriv)
-
-    solLW = solver(dt, dx, init, (a,b), (0,time), problem, deriv, "LW")
-
-    plt.ion()
-    figure = plt.figure()
-    axis = figure.add_subplot(111)
-
-    #line0, = axis.plot(x, init(x), 'red', label='Analytical Solution')  # Returns a tuple of line objects, thus the comma
-    line1, = axis.plot(x, init(x), color = 'green', label='LW Solution')  # Returns a tuple of line objects, thus the comma
-    line2, = axis.plot(x, init(x), color='blue', label='ENO Solution')  # Returns a tuple of line objects, thus the comma
-    plt.ylim(-.5, 1.5)
-    plt.legend()
-    plt.xlabel("x")
-    plt.ylabel("u(x,t)")
-
-    text = plt.text(0, 0, "t = 0")
-
-    for i in range(0, Nt):
-        text.set_text("t = %f" % t[i])
-        #line0.set_ydata(analytic(x, t[i]))
-        line1.set_ydata(solLW[:, i])
-        line2.set_ydata(solENO[:, i])
-        figure.canvas.draw()
-        figure.canvas.flush_events()
-
-    plt.ioff()
-    plt.show()
-
+        self.global_t += self.dt
+        return self.dt
