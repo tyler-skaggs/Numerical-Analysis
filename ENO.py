@@ -35,7 +35,7 @@ class ENO:
         ib = self.ib
         self.xc = np.linspace(l - ib * self.delx, r + ib * self.delx, 2 * self.ib + self.ni)
 
-        self.a = 1 #max(abs(deriv(self.xc)))
+        self.a = 1 #max(abs(deriv(self.u)))
 
         # interface values
         self.ul = np.zeros(2 * self.ib + self.ni + 1)
@@ -226,7 +226,7 @@ class EENO:
         ib = self.ib
         self.xc = np.linspace(l - ib * self.dx, r + ib * self.dx, 2 * self.ib + self.ni)
 
-        self.alpha = 1 #max(abs(deriv(self.xc)))
+        self.alpha = 1 #max(abs(deriv(self.u)))
 
         # interface values
         self.p_plus = np.zeros(2 * self.ib + self.ni + 1)
@@ -371,4 +371,154 @@ class EENO:
                                       alpha3[j] * self.dt / self.dx * self.flux
 
         self.global_t += self.dt
+        return self.dt
+
+class WENO:
+    '''
+    ### Description
+
+    The class to solve the 1-D linear advection equation using ENO
+    reconstruction scheme of order 3.
+    '''
+
+    def __init__(self, l, r, dx, dt, problem, deriv, init, order=3, rr = 2):
+        '''
+        ### Description
+        Initialize the ENO_advection class with:
+
+        `a`: The convection speed. Default value is 1.0.
+        `ni`: The number of internal cells. Default value is 100.
+        '''
+        self.order = order
+        self.r = rr
+        self.ib = order   # k-th order scheme requires k-1 ghost cells
+        self.ni = int((r - l) / dx) + 1
+        self.im = self.ni + self.ib  # to iterate through all the internal cells: for i in range(ib, im)
+        self.f = problem
+        self.fprime = deriv
+        self.init = init
+        self.dx = dx
+        self.dt = dt
+
+        self.u = np.zeros(2 * self.ib + self.ni)  # solution vector
+        self.u_m = np.zeros_like(self.u)  # stores the middle step (previous solution) in Runge-Kutta scheme
+
+        ib = self.ib
+        self.xc = np.linspace(l - ib * self.dx, r + ib * self.dx, 2 * self.ib + self.ni)
+
+        self.alpha = 1 #max(abs(deriv(self.u)))
+
+        # interface values
+        self.L = np.zeros(2 * self.ib + self.ni)
+        self.Rl = np.zeros(2 * self.ib + self.ni)
+        self.Rr =np.zeros(2 * self.ib + self.ni)
+
+    def set_initial(self):
+        '''
+        ### Description
+
+        Set the initial condition
+        '''
+        self.u = self.init(self.xc)
+
+
+    def ENO_reconstruction(self):
+        '''
+        ### Description:
+
+        Perform ENO reconstruction cell-wise
+        '''
+        ib, im = self.ib, self.im
+        # compute the NDD first
+        #self.NDD()
+
+        # reconstruct on internal cell faces, cell by cell
+        for j in range(ib-1, im+1):
+             def R(x):
+                 e = pow(10,-5)
+
+                 if self.r == 2:
+                     IS_j = pow(self.u[j] - self.u[j-1], 2) /self.dx
+                     IS_jp = pow(self.u[j+1] - self.u[j], 2) / self.dx
+
+                     if 1 > 0:
+                         a0 = 1/(2 * pow(e + IS_j, 2))
+                         a1 = 1/pow(e + IS_jp, 2)
+                     else:
+                         a0 = 1/pow(e + IS_j, 2)
+                         a1 = 1 / (2 * pow(e + IS_jp, 2))
+
+
+                     def pj_0(x):
+                         return self.u[j-1] + (self.u[j] - self.u[j-1])/(self.dx) * (x - self.xc[j-1])
+                     def pj_1(x):
+                         return self.u[j] + (self.u[j+1] - self.u[j])/(self.dx) * (x - self.xc[j])
+
+                     val = a0 / (a0 + a1) * pj_0(x) + a1 / (a0 + a1) * pj_1(x)
+
+                 elif self.r == 3:
+                     IS_j = (pow( self.u[j-1] - self.u[j-2], 2) + pow(self.u[j] - self.u[j-1], 2) +
+                             pow((self.u[j] - 2 * self.u[j-1] - self.u[j-2]), 2))
+                     IS_jp = (pow( self.u[j] - self.u[j-1], 2) + pow(self.u[j+1] - self.u[j], 2) +
+                              pow((self.u[j+1] - 2 *self.u[j] + self.u[j-1]), 2))
+                     IS_jpp = (pow(self.u[j+1] - self.u[j], 2) + pow(self.u[j + 2] - self.u[j+1], 2) +
+                               pow((self.u[j + 2] - 2 * self.u[j+1] + self.u[j]), 2))
+
+                     if self.fprime(self.u[j]) > 0:
+                         a0 = 1/(12 * pow(e + IS_j, 3))
+                         a1 = 1/(2 * pow(e + IS_jp, 3))
+                         a2 = 1/(4 * pow(e + IS_jpp, 3))
+                     else:
+                         a0 = 1 / (4 * pow(e + IS_j, 3))
+                         a1 = 1 / (2 * pow(e + IS_jp, 3))
+                         a2 = 1 / (12 * pow(e + IS_jpp, 3))
+
+                     def pj_0(x):
+                         return ((self.u[j] - 2 * self.u[j-1] + self.u[j-2])/(2 * pow(self.dx,2)) * pow((x - self.xc[j-1]),2) +
+                                 (self.u[j] - self.u[j-2]) /(2 * self.dx) * (x - self.xc[j-1]) +
+                                 self.u[j-1] - (self.u[j] - 2 * self.u[j-1] + self.u[j-2])/24 )
+                     def pj_1(x):
+                         return ((self.u[j+1] - 2 * self.u[j] + self.u[j-1])/(2 *  pow(self.dx,2)) * pow((x - self.xc[j]),2) +
+                                 (self.u[j+1] - self.u[j-1]) /(2 * self.dx) * (x - self.xc[j]) +
+                                 self.u[j] - (self.u[j+1] - 2 * self.u[j] + self.u[j-1])/24 )
+                     def pj_2(x):
+                         return ((self.u[j+2] - 2 * self.u[j+1] + self.u[j])/(2 *  pow(self.dx,2)) * pow((x - self.xc[j+1]),2) +
+                                 (self.u[j+2] - self.u[j]) /(2 * self.dx) * (x - self.xc[j+1]) +
+                                 self.u[j+1] - (self.u[j+2] - 2 * self.u[j+1] + self.u[j])/24 )
+
+                     val = a0 / (a0 + a1 + a2) * pj_0(x) + a1 / (a0 + a1 + a2) * pj_1(x) + a2 / (a0 + a1 + a2) * pj_2(x)
+
+                 return val
+
+
+             self.Rr[j] = R(self.xc[j] + self.dx/2)
+             self.Rl[j] = R(self.xc[j] - self.dx/2)
+
+
+    def setL(self):
+        '''
+        ### Description
+
+        Compute the L-F flux based on the reconstructed values
+        '''
+        def flux(a, b):
+            return 1/2 * (self.f(a) + self.f(b) - self.alpha * (b - a))
+
+        self.L[self.ib:self.im] = -1 / self.dx * (flux(self.Rr[self.ib:self.im], self.Rr[self.ib+1:self.im+1]) -
+                                                  flux(self.Rl[self.ib-1:self.im-1], self.Rl[self.ib:self.im]))
+
+
+    def Runge_Kutta(self):
+        self.u_m = self.u.copy()
+
+        alpha1 = [1.0, 3.0 / 4.0, 1.0 / 3.0]
+        alpha2 = [0.0, 1.0 / 4.0, 2.0 / 3.0]
+        alpha3 = [1.0, 1.0 / 4.0, 2.0 / 3.0]
+
+        for j in range(3):
+            self.ENO_reconstruction()
+            self.setL()
+            self.u[self.ib:self.im] = alpha1[j] * self.u_m[self.ib:self.im] + alpha2[j] * self.u[self.ib:self.im] + \
+                                      alpha3[j] * self.dt * self.L[self.ib:self.im]
+
         return self.dt

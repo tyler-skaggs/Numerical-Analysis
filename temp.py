@@ -51,7 +51,7 @@ def initial_smooth(x):
     return f
 
 def analytic_linear_smooth(x, t):
-    return initial_smooth(x - a * t)
+    return initial_smooth(x - t)
 
 def analytic_GreenLight(x, t):
     y = np.zeros(np.size(x))
@@ -98,23 +98,25 @@ def initial_smooth(x):
     return f
 
 if __name__ == '__main__':
-    #analytic = analytical3
+    analytic = analytic_linear_smooth
 
     def init(x):
-        return initial_smooth(x)
+        #return 1/2 + np.sin(np.pi * x)
+        return analytic(x,0)
 
-    def analytic(x, t):
-        return init(x - t)
+
+    #def analytic(x, t):
+        #return init(x - t)
 
     problem = burgers_prime
     deriv = burgers_prime
 
     dx = 1/50
-    dt = dx/2
+    dt = dx/5
 
     a = 0
-    b = 2
-    time = 0.5
+    b = 3.5
+    time = 2.5
 
     Nx = int((b-a) / dx) + 1
     Nt = int(time / dt) + 1
@@ -122,7 +124,7 @@ if __name__ == '__main__':
     x = np.linspace(a,b,Nx)
     t = np.linspace(0, time, Nt)
 
-    plot = 0
+    plot = 1
 
     if plot == 1:
         solLW = solver(dt, dx, init, (a,b), (0,time), problem, deriv, "LW")
@@ -133,17 +135,24 @@ if __name__ == '__main__':
         eeno = EENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv)
         eeno.set_initial()
 
+        weno = WENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv, rr = 2)
+        weno.set_initial()
+
+        weno2 = WENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv, rr = 3)
+        weno2.set_initial()
 
         plt.ion()
         figure = plt.figure()
         axis = figure.add_subplot(111)
 
         line0, = axis.plot(x, init(x), 'red', label='Analytical Solution')  # Returns a tuple of line objects, thus the comma
-        line1, = axis.plot(eno.xc[2:-2], eno.u[2:-2], color = 'green', label='ENO Solution')  # Returns a tuple of line objects, thus the comma
-        line2, = axis.plot(eeno.xc[5:-5], eeno.u[5:-5], color='blue', label='EENO Solution')  # Returns a tuple of line objects, thus the comma
+        #line1, = axis.plot(eno.xc[2:-2], eno.u[2:-2], color = 'green', label='ENO Solution')  # Returns a tuple of line objects, thus the comma
+        #line2, = axis.plot(eeno.xc[5:-5], eeno.u[5:-5], color='blue', label='EENO Solution')  # Returns a tuple of line objects, thus the comma
+        lineWENO, = axis.plot(weno.xc[2:-2], weno.u[2:-2], color='black', label='WENO Solution')
+        lineWENO2, = axis.plot(weno2.xc[2:-2], weno2.u[2:-2], color='purple', label='WENO Solution')
         #lineLW, = axis.plot(x, init(x), color='purple', label='LW Solution')  # Returns a tuple of line objects, thus the comma
 
-        plt.ylim(-.5, 2.5)
+        plt.ylim(-0.5, 2.5)
         plt.legend()
         plt.xlabel("x")
         plt.ylabel("u(x,t)")
@@ -155,11 +164,17 @@ if __name__ == '__main__':
             text.set_text("t = %f" % t[i])
             line0.set_ydata(analytic(x, t[i+1]))
 
-            line1.set_ydata(eno.u[2:-2])
-            eno.Runge_Kutta()
+            #line1.set_ydata(eno.u[2:-2])
+            #eno.Runge_Kutta()
 
-            line2.set_ydata(eeno.u[5:-5])
-            eeno.Runge_Kutta()
+            #line2.set_ydata(eeno.u[5:-5])
+            #eeno.Runge_Kutta()
+
+            lineWENO.set_ydata(weno.u[2:-2])
+            weno.Runge_Kutta()
+
+            lineWENO2.set_ydata(weno2.u[2:-2])
+            weno2.Runge_Kutta()
 
             #lineLW.set_ydata(solLW[:, i+1])
 
