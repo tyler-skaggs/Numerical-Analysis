@@ -151,19 +151,19 @@ if __name__ == '__main__':
     global a
     a = 0.5
 
-    analytic = analytical2
+    analytic = analytic_linear_smooth
     def init(x):
         return analytic(x, 0)
 
     #init = initial_sin
-    problem = burgers
-    deriv = burgers_prime
-    plot = 1
+    problem = linear#burgers
+    deriv = linear_prime#burgers_prime
+    plot = 0
 
     h = 0.005
     k = h / 3
     xbounds = (0, 1)
-    tbounds = (0, 1)
+    tbounds = (0, 0.5)
     Nx = int((xbounds[1] - xbounds[0]) / h) + 1
     Nt = int((tbounds[1] - tbounds[0]) / k) + 1
     x = np.linspace(xbounds[0], xbounds[1], Nx)  # discretization of space
@@ -219,7 +219,7 @@ if __name__ == '__main__':
 
     ## Calculating and Plotting Error
     else:
-        hvals = (.1, 0.1/2, 0.1/4, 0.1/8, 0.1/16, 0.1/32, 0.1/64, 0.1/128, 0.1/256)
+        hvals = (.1, 0.1/2, 0.1/4, 0.1/8, 0.1/16)#, 0.1/32, 0.1/64, 0.1/128, 0.1/256)
         hs = -1
 
         maxerror_u = np.zeros((len(hvals), 3))

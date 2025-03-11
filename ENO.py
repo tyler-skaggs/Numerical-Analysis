@@ -35,7 +35,7 @@ class ENO:
         ib = self.ib
         self.xc = np.linspace(l - ib * self.delx, r + ib * self.delx, 2 * self.ib + self.ni)
 
-        self.a = max(abs(deriv(self.xc)))
+        self.a = 1 #max(abs(deriv(self.xc)))
 
         # interface values
         self.ul = np.zeros(2 * self.ib + self.ni + 1)
@@ -53,15 +53,6 @@ class ENO:
         Set the initial condition
         '''
         self.u = self.init(self.xc)
-
-    def set_ghost(self):
-        '''
-        ### Description
-
-        Set the value in the boundary ghost cells
-        '''
-
-
 
     def NDD(self):
         '''
@@ -193,7 +184,6 @@ class ENO:
         alpha3 = [1.0, 1.0 / 4.0, 2.0 / 3.0]
 
         for j in range(3):
-            self.set_ghost()
             self.ENO_reconstruction()
             self.LAX_flux()
             self.u[self.ib:self.im] = alpha1[j] * self.u_m[self.ib:self.im] + alpha2[j] * self.u[self.ib:self.im] - \
@@ -236,7 +226,7 @@ class EENO:
         ib = self.ib
         self.xc = np.linspace(l - ib * self.dx, r + ib * self.dx, 2 * self.ib + self.ni)
 
-        self.alpha = max(abs(deriv(self.xc)))
+        self.alpha = 1 #max(abs(deriv(self.xc)))
 
         # interface values
         self.p_plus = np.zeros(2 * self.ib + self.ni + 1)
@@ -355,6 +345,7 @@ class EENO:
             self.f_hat[j] = Q_Plus + Q_Minus
 
         # set the boundary state by using periodic condition
+        #self.f_hat[ib-1] = self.f_hat[im-1]
 
 
     def approx_flux(self):
