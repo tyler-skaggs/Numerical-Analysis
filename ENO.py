@@ -438,8 +438,8 @@ class WENO:
                  e = pow(10,-5)
 
                  if self.r == 2:
-                     IS_j = pow(self.u[j] - self.u[j-1], 2) /self.dx
-                     IS_jp = pow(self.u[j+1] - self.u[j], 2) / self.dx
+                     IS_j = pow(self.u[j] - self.u[j-1], 2)
+                     IS_jp = pow(self.u[j+1] - self.u[j], 2)
 
                      if 1 > 0:
                          a0 = 1/(2 * pow(e + IS_j, 2))
@@ -450,7 +450,8 @@ class WENO:
 
 
                      def pj_0(x):
-                         return self.u[j-1] + (self.u[j] - self.u[j-1])/(self.dx) * (x - self.xc[j-1])
+                         return self.u[j-1   ] + (self.u[j] - self.u[j-1])/(self.dx) * (x - self.xc[j-1])
+
                      def pj_1(x):
                          return self.u[j] + (self.u[j+1] - self.u[j])/(self.dx) * (x - self.xc[j])
 

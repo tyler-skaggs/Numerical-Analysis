@@ -148,8 +148,8 @@ if __name__ == '__main__':
         line0, = axis.plot(x, init(x), 'red', label='Analytical Solution')  # Returns a tuple of line objects, thus the comma
         #line1, = axis.plot(eno.xc[2:-2], eno.u[2:-2], color = 'green', label='ENO Solution')  # Returns a tuple of line objects, thus the comma
         #line2, = axis.plot(eeno.xc[5:-5], eeno.u[5:-5], color='blue', label='EENO Solution')  # Returns a tuple of line objects, thus the comma
-        lineWENO, = axis.plot(weno.xc[2:-2], weno.u[2:-2], color='black', label='WENO Solution')
-        lineWENO2, = axis.plot(weno2.xc[2:-2], weno2.u[2:-2], color='purple', label='WENO Solution')
+        lineWENO, = axis.plot(weno.xc[2:-2], weno.u[2:-2], color='black', label='WENO2 Solution')
+        lineWENO2, = axis.plot(weno2.xc[2:-2], weno2.u[2:-2], color='purple', label='WENO3 Solution')
         #lineLW, = axis.plot(x, init(x), color='purple', label='LW Solution')  # Returns a tuple of line objects, thus the comma
 
         plt.ylim(-0.5, 2.5)
