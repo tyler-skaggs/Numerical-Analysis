@@ -105,18 +105,15 @@ if __name__ == '__main__':
         return analytic(x,0)
 
 
-    #def analytic(x, t):
-        #return init(x - t)
-
     problem = burgers_prime
     deriv = burgers_prime
 
     dx = 1/50
-    dt = dx/5
+    dt = dx/2
 
     a = 0
-    b = 3.5
-    time = 2.5
+    b = 2
+    time = 0.5
 
     Nx = int((b-a) / dx) + 1
     Nt = int(time / dt) + 1
@@ -138,9 +135,6 @@ if __name__ == '__main__':
         weno = WENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv, rr = 2)
         weno.set_initial()
 
-        weno2 = WENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv, rr = 3)
-        weno2.set_initial()
-
         plt.ion()
         figure = plt.figure()
         axis = figure.add_subplot(111)
@@ -149,7 +143,6 @@ if __name__ == '__main__':
         #line1, = axis.plot(eno.xc[2:-2], eno.u[2:-2], color = 'green', label='ENO Solution')  # Returns a tuple of line objects, thus the comma
         #line2, = axis.plot(eeno.xc[5:-5], eeno.u[5:-5], color='blue', label='EENO Solution')  # Returns a tuple of line objects, thus the comma
         lineWENO, = axis.plot(weno.xc[2:-2], weno.u[2:-2], color='black', label='WENO2 Solution')
-        lineWENO2, = axis.plot(weno2.xc[2:-2], weno2.u[2:-2], color='purple', label='WENO3 Solution')
         #lineLW, = axis.plot(x, init(x), color='purple', label='LW Solution')  # Returns a tuple of line objects, thus the comma
 
         plt.ylim(-0.5, 2.5)
@@ -172,9 +165,6 @@ if __name__ == '__main__':
 
             lineWENO.set_ydata(weno.u[2:-2])
             weno.Runge_Kutta()
-
-            lineWENO2.set_ydata(weno2.u[2:-2])
-            weno2.Runge_Kutta()
 
             #lineLW.set_ydata(solLW[:, i+1])
 

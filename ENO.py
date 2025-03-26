@@ -422,6 +422,34 @@ class WENO:
         self.u = self.init(self.xc)
 
 
+    def ENO_weight(self, r: int):
+        '''
+        ### Description:
+
+        Compute the ENO weight based on the left shift of the stencil
+        '''
+        crj = np.zeros(self.order)
+        for j in range(self.order):
+            for m in range(j + 1, self.order + 1):
+                de = 1.0
+                no = 0.0
+                for l in range(self.order + 1):
+                    if l != m:
+                        de = de * (m - l)
+
+                for l in range(self.order + 1):
+                    if l != m:
+                        ee = 1.0
+                        for q in range(self.order + 1):
+                            if q != m and q != l:
+                                ee *= (r - q + 1)
+                        no += ee
+
+                crj[j] += float(no) / float(de)
+
+        return crj
+
+
     def ENO_reconstruction(self):
         '''
         ### Description:
@@ -441,21 +469,18 @@ class WENO:
                      IS_j = pow(self.u[j] - self.u[j-1], 2)
                      IS_jp = pow(self.u[j+1] - self.u[j], 2)
 
-                     if 1 > 0:
+                     if self.fprime(self.u[j]) > 0:
                          a0 = 1/(2 * pow(e + IS_j, 2))
                          a1 = 1/pow(e + IS_jp, 2)
                      else:
                          a0 = 1/pow(e + IS_j, 2)
                          a1 = 1 / (2 * pow(e + IS_jp, 2))
 
+                     v0 = self.u[[j-1, j, j+1]]
+                     v1 = self.u[[j, j + 1, j+2]]
 
-                     def pj_0(x):
-                         return self.u[j-1   ] + (self.u[j] - self.u[j-1])/(self.dx) * (x - self.xc[j-1])
-
-                     def pj_1(x):
-                         return self.u[j] + (self.u[j+1] - self.u[j])/(self.dx) * (x - self.xc[j])
-
-                     val = a0 / (a0 + a1) * pj_0(x) + a1 / (a0 + a1) * pj_1(x)
+                     val = (a0 / (a0 + a1) * self.ENO_weight(1) @ v0 +
+                            a1 / (a0 + a1) * self.ENO_weight(0) @ v1)
 
                  elif self.r == 3:
                      IS_j = (pow( self.u[j-1] - self.u[j-2], 2) + pow(self.u[j] - self.u[j-1], 2) +
@@ -474,20 +499,13 @@ class WENO:
                          a1 = 1 / (2 * pow(e + IS_jp, 3))
                          a2 = 1 / (12 * pow(e + IS_jpp, 3))
 
-                     def pj_0(x):
-                         return ((self.u[j] - 2 * self.u[j-1] + self.u[j-2])/(2 * pow(self.dx,2)) * pow((x - self.xc[j-1]),2) +
-                                 (self.u[j] - self.u[j-2]) /(2 * self.dx) * (x - self.xc[j-1]) +
-                                 self.u[j-1] - (self.u[j] - 2 * self.u[j-1] + self.u[j-2])/24 )
-                     def pj_1(x):
-                         return ((self.u[j+1] - 2 * self.u[j] + self.u[j-1])/(2 *  pow(self.dx,2)) * pow((x - self.xc[j]),2) +
-                                 (self.u[j+1] - self.u[j-1]) /(2 * self.dx) * (x - self.xc[j]) +
-                                 self.u[j] - (self.u[j+1] - 2 * self.u[j] + self.u[j-1])/24 )
-                     def pj_2(x):
-                         return ((self.u[j+2] - 2 * self.u[j+1] + self.u[j])/(2 *  pow(self.dx,2)) * pow((x - self.xc[j+1]),2) +
-                                 (self.u[j+2] - self.u[j]) /(2 * self.dx) * (x - self.xc[j+1]) +
-                                 self.u[j+1] - (self.u[j+2] - 2 * self.u[j+1] + self.u[j])/24 )
+                     v0 = self.u[[j - 2, j - 1, j, j + 1]]
+                     v1 = self.u[[j - 1, j, j + 1, j + 2]]
+                     v2 = self.u[[j, j + 1, j + 2, j + 3]]
 
-                     val = a0 / (a0 + a1 + a2) * pj_0(x) + a1 / (a0 + a1 + a2) * pj_1(x) + a2 / (a0 + a1 + a2) * pj_2(x)
+                     val = (a0 / (a0 + a1 + a2) * self.ENO_weight(2) @ v0 +
+                            a1 / (a0 + a1 + a2) * self.ENO_weight(1) @ v1 +
+                            a2 / (a0 + a1 + a2) * self.ENO_weight(0) @ v2)
 
                  return val
 
