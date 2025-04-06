@@ -1,3 +1,5 @@
+from pickletools import uint2
+
 import numpy as np
 from sympy import *
 
@@ -35,7 +37,7 @@ class ENO:
         ib = self.ib
         self.xc = np.linspace(l - ib * self.delx, r + ib * self.delx, 2 * self.ib + self.ni)
 
-        self.a = 1 #max(abs(deriv(self.u)))
+        self.a = max(abs(deriv(self.u)))
 
         # interface values
         self.ul = np.zeros(2 * self.ib + self.ni + 1)
@@ -53,6 +55,20 @@ class ENO:
         Set the initial condition
         '''
         self.u = self.init(self.xc)
+
+    def set_ghost(self):
+        '''
+        ### Description
+
+        Set the value in the boundary ghost cells based on a periodic initial condition
+        '''
+        # left boundary
+        for k in range(1, self.order):
+            self.u[self.ib - k] = self.u[self.im - k]
+
+        # right boundary
+        for k in range(self.order-1):
+            self.u[self.im + k] = self.u[self.ib + k]
 
     def NDD(self):
         '''
@@ -177,6 +193,7 @@ class ENO:
         self.flux = 1/2 * (self.f(self.ul) + self.f(self.ur) - self.a * (self.ur - self.ul))
 
     def Runge_Kutta(self):
+        self.set_ghost()
         self.u_m = self.u.copy()
 
         alpha1 = [1.0, 3.0 / 4.0, 1.0 / 3.0]
@@ -226,7 +243,7 @@ class EENO:
         ib = self.ib
         self.xc = np.linspace(l - ib * self.dx, r + ib * self.dx, 2 * self.ib + self.ni)
 
-        self.alpha = 1 #max(abs(deriv(self.u)))
+        self.alpha = max(abs(deriv(self.u)))
 
         # interface values
         self.p_plus = np.zeros(2 * self.ib + self.ni + 1)
@@ -248,6 +265,19 @@ class EENO:
         '''
         self.u = self.init(self.xc)
 
+    def set_ghost(self):
+        '''
+        ### Description
+
+        Set the value in the boundary ghost cells based on a periodic initial condition
+        '''
+        # left boundary
+        for k in range(1, self.order):
+            self.u[self.ib - k] = self.u[self.im - k-1]
+
+        # right boundary
+        for k in range(self.order):
+            self.u[self.im + k] = self.u[self.ib + k+1]
 
     def NDD(self):
         '''
@@ -365,6 +395,7 @@ class EENO:
         alpha3 = [1.0, 1.0 / 4.0, 2.0 / 3.0]
 
         for j in range(3):
+            self.set_ghost()
             self.ENO_reconstruction()
             self.approx_flux()
             self.u[self.ib:self.im] = alpha1[j] * self.u_m[self.ib:self.im] + alpha2[j] * self.u[self.ib:self.im] - \
@@ -406,7 +437,7 @@ class WENO:
         ib = self.ib
         self.xc = np.linspace(l - ib * self.dx, r + ib * self.dx, 2 * self.ib + self.ni)
 
-        self.alpha = 1 #max(abs(deriv(self.u)))
+        self.alpha = max(abs(deriv(self.u)))
 
         # interface values
         self.L = np.zeros(2 * self.ib + self.ni)
@@ -448,6 +479,21 @@ class WENO:
                 crj[j] += float(no) / float(de)
 
         return crj
+
+
+    def set_ghost(self):
+        '''
+        ### Description
+
+        Set the value in the boundary ghost cells based on a periodic initial condition
+        '''
+        # left boundary
+        for k in range(1, self.order):
+            self.u[self.ib - k] = self.u[self.im - k-1]
+
+        # right boundary
+        for k in range(self.order):
+            self.u[self.im + k] = self.u[self.ib + k+1]
 
 
     def ENO_reconstruction(self):
@@ -535,9 +581,211 @@ class WENO:
         alpha3 = [1.0, 1.0 / 4.0, 2.0 / 3.0]
 
         for j in range(3):
+            self.set_ghost()
             self.ENO_reconstruction()
             self.setL()
             self.u[self.ib:self.im] = alpha1[j] * self.u_m[self.ib:self.im] + alpha2[j] * self.u[self.ib:self.im] + \
                                       alpha3[j] * self.dt * self.L[self.ib:self.im]
+
+        return self.dt
+
+class EWENO:
+    '''
+    ### Description
+
+    The class to solve the 1-D linear advection equation using ENO
+    reconstruction scheme of order 3.
+    '''
+
+    def __init__(self, l, r, dx, dt, problem, deriv, init, rr = 3):
+        '''
+        ### Description
+        Initialize the ENO_advection class with:
+        '''
+
+        self.order = rr
+        self.r = rr
+        self.ib = rr   # number of extra boundary cells needed
+        self.ni = int((r - l) / dx) + 1
+        self.im = self.ni + self.ib  # to iterate through all the internal cells: for i in range(ib, im)
+        self.f = problem
+        self.fprime = deriv
+        self.init = init
+        self.dx = dx
+        self.dt = dt
+
+        self.u = np.zeros(2 * self.ib + self.ni)  # solution vector
+        self.u_m = np.zeros_like(self.u)  # stores the middle step (previous solution) in Runge-Kutta scheme
+
+        ib = self.ib
+        self.xc = np.linspace(l - ib * self.dx, r + ib * self.dx, 2 * self.ib + self.ni)
+
+        self.alpha = max(abs(deriv(self.u)))
+
+        # interface values
+        self.L = np.zeros(2 * self.ib + self.ni)
+        self.f_plus = np.zeros(2 * self.ib + self.ni)
+        self.f_minus = np.zeros(2 * self.ib + self.ni)
+
+    def set_initial(self):
+        '''
+        ### Description
+
+        Set the initial condition
+        '''
+        self.u = self.init(self.xc)
+
+    def set_ghost(self):
+        '''
+        ### Description
+
+        Set the value in the boundary ghost cells based on a periodic initial condition
+        '''
+        # left boundary
+        for k in range(1, self.order):
+            self.u[self.ib - k] = 0#self.u[self.im - k-1]
+
+        # right boundary
+        for k in range(self.order):
+            self.u[self.im + k] = 1#self.u[self.ib + k+1]
+
+
+    def ENO_reconstruction(self):
+        '''
+        ### Description:
+
+        Perform ENO reconstruction cell-wise
+        '''
+        ib, im = self.ib, self.im
+        # compute the NDD first
+        #self.NDD()
+
+        # reconstruct on internal cell faces, cell by cell
+        a = np.array([[[-1 / 2, 3 / 2, 0], [1 / 2, 1 / 2, 0], [0, 0, 0]],
+                      [[1 / 3, -7 / 6, 11 / 6], [-1 / 6, 5 / 6, 1 / 3], [1 / 3, 5 / 6, -1 / 6]]])
+
+        C = np.array([[1 / 3, 2 / 3, 0],
+                      [1 / 10, 6 / 10, 3 / 10]])
+
+        p = self.r
+        e = pow(10, -6)
+
+        def q(k, r, g):
+            sum = 0
+            for l in range(r):
+                sum += a[r - 2, k, l] * g[l]
+            return sum
+
+        fl_plus = 1/2 * (self.f(self.u) + self.alpha * self.u)
+        fl_minus = 1/2 * (self.f(self.u) - self.alpha * self.u)
+
+        for j in range(ib-1, im+1):
+
+            ### Positive
+            if self.r == 3:
+                IS_k = np.array([ 13/12 * pow(fl_plus[j-2] - 2 * fl_plus[j-1] + fl_plus[j], 2) + 1/4 *
+                                  pow(fl_plus[j-1] - 4 * fl_plus[j-1] + 3 * fl_plus[j], 2),
+
+                                  13/12 * pow(fl_plus[j-1] - 2 * fl_plus[j] + fl_plus[j+1], 2) + 1/4 *
+                                  pow(fl_plus[j-1] - fl_plus[j+1], 2),
+
+                                  13/12 * pow(fl_plus[j] - 2 * fl_plus[j+1] + fl_plus[j+2], 2) + 1/4 *
+                                  pow(3 * fl_plus[j] - 4 * fl_plus[j+1] + fl_plus[j+1], 2)])
+            else:
+                IS_k = np.array([pow(fl_plus[j] - fl_plus[j-1], 2),
+                                 pow(fl_plus[j+1] - fl_plus[j], 2), 0])
+
+            alpha = C[self.r-2, :] / pow(e + IS_k, p)
+
+            omega = alpha / np.sum(alpha)
+
+            sum = 0
+            for k in range(self.r):
+                sum += omega[k] * q(k, self.r, fl_plus[j+k-self.r + 1:j+k+1])
+
+            self.f_plus[j] = sum
+
+            ### Negative
+            if self.r == 3:
+                IS_k = np.array([13 / 12 * pow(fl_minus[j - 2] - 2 * fl_minus[j - 1] + fl_minus[j], 2) + 1 / 4 *
+                                 pow(fl_minus[j - 1] - 4 * fl_minus[j - 1] + 3 * fl_minus[j], 2),
+
+                                 13 / 12 * pow(fl_minus[j - 1] - 2 * fl_minus[j] + fl_minus[j + 1], 2) + 1 / 4 *
+                                 pow(fl_minus[j - 1] - fl_minus[j + 1], 2),
+
+                                 13 / 12 * pow(fl_minus[j] - 2 * fl_minus[j + 1] + fl_minus[j + 2], 2) + 1 / 4 *
+                                 pow(3 * fl_minus[j] - 4 * fl_minus[j + 1] + fl_minus[j + 1], 2)])
+            else:
+                IS_k = np.array([pow(fl_minus[j] - fl_minus[j - 1], 2),
+                                 pow(fl_minus[j + 1] - fl_minus[j], 2),
+                                 0])
+
+            alpha = C[self.r - 2, :] / pow(e + IS_k, p)
+
+            omega = alpha / np.sum(alpha)
+
+            sum = 0
+            for k in range(self.r):
+                sum += omega[k] * q(k, self.r, fl_minus[j + k - self.r + 1:j + k+1])
+
+            self.f_minus[j] = sum
+
+
+    def setL(self):
+        '''
+        ### Description
+
+        Compute the L-F flux based on the reconstructed values
+        '''
+        f_Half = self.f_plus + self.f_minus
+
+        self.L[self.ib:self.im] = -1/self.dx * (f_Half[self.ib:self.im] - f_Half[self.ib-1:self.im-1])
+
+
+    def Runge_Kutta(self):
+        if self.r == 2:
+            self.u_m = self.u.copy()
+            alpha1 = [1.0, 3.0 / 4.0, 1.0 / 3.0]
+            alpha2 = [0.0, 1.0 / 4.0, 2.0 / 3.0]
+            alpha3 = [1.0, 1.0 / 4.0, 2.0 / 3.0]
+
+            for j in range(3):
+                self.set_ghost()
+                self.ENO_reconstruction()
+                self.setL()
+                self.u[self.ib:self.im] = (alpha1[j] * self.u_m[self.ib:self.im] +
+                                           alpha2[j] * self.u[self.ib:self.im] +
+                                           alpha3[j] * self.dt * self.L[self.ib:self.im])
+
+        else:
+            uk = [self.u.copy(), self.u.copy(), self.u.copy(), self.u.copy(), self.u.copy()]
+            Lk = [self.u.copy(), self.u.copy(), self.u.copy(), self.u.copy()]
+
+            alpha0 = [1, 1, 1, -1/3] #[1, 1/2, 1/9, 0]
+            alpha1 = [0, 0, 0, 1/3] #[0, 1/2, 2/9, 1/3]
+            alpha2 = [0, 0, 0, 2/3] #[0, 0, 2/3, 1/3]
+            alpha3 = [0, 0, 0, 1/3] #[0, 0, 0, 1/3]
+            alphaL0 = [1/2, 0, 0, 0]#[1/2, -1/4, -1/9, 0]
+            alphaL1 = [0, 1/2, 0, 0] #[0, 1/2, -1/3, 1/6]
+            alphaL2 = [0, 0, 1, 0] #[0, 0, 1, 0]
+            alphaL3 = [0, 0, 0, 1/6] #[0, 0, 0, 1/6]
+
+
+            for j in range(4):
+                self.set_ghost()
+                self.ENO_reconstruction()
+                self.setL()
+                Lk[j] = self.L
+                uk[j+1][self.ib:self.im] = \
+                    (   alpha0[j] * uk[0][self.ib:self.im] +
+                        alpha1[j] * uk[1][self.ib:self.im] +
+                        alpha2[j] * uk[2][self.ib:self.im] +
+                        alpha3[j] * uk[3][self.ib:self.im] +
+                        alphaL0[j] * self.dt * Lk[0][self.ib:self.im] +
+                        alphaL1[j] * self.dt * Lk[1][self.ib:self.im] +
+                        alphaL2[j] * self.dt * Lk[2][self.ib:self.im] +
+                        alphaL3[j] * self.dt * Lk[3][self.ib:self.im])
+
+                self.u[self.ib:self.im] = uk[j+1].copy()[self.ib:self.im]
 
         return self.dt

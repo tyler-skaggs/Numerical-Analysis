@@ -10,6 +10,12 @@ def burgers(x):
 def burgers_prime(x):
     return x
 
+def linear_deriv(x):
+    if type(x) == type(1.0):
+        return 1
+    else:
+        return np.ones(len(x))
+
 def divided_difference(f, u, x):
     if len(u) == 1:
         return f(u)
@@ -98,22 +104,25 @@ def initial_smooth(x):
     return f
 
 if __name__ == '__main__':
-    analytic = analytic_linear_smooth
+    analytic = analytical1
 
     def init(x):
-        #return 1/2 + np.sin(np.pi * x)
+        #return np.sin(np.pi * x)
         return analytic(x,0)
 
+    #def analytic(x,t):
+        #return init(x - t)
 
-    problem = burgers_prime
+
+    problem = burgers
     deriv = burgers_prime
 
     dx = 1/50
     dt = dx/2
 
     a = 0
-    b = 2
-    time = 0.5
+    b = 5
+    time = 3
 
     Nx = int((b-a) / dx) + 1
     Nt = int(time / dt) + 1
@@ -124,16 +133,19 @@ if __name__ == '__main__':
     plot = 1
 
     if plot == 1:
-        solLW = solver(dt, dx, init, (a,b), (0,time), problem, deriv, "LW")
+        #solLW = solver(dt, dx, init, (a,b), (0,time), problem, deriv, "LW")
 
-        eno = ENO(l = a, r = b, dx=dx, dt=dt, init = init, problem = problem, deriv=deriv)
-        eno.set_initial()
+        #eno = ENO(l = a, r = b, dx=dx, dt=dt, init = init, problem = problem, deriv=deriv)
+        #eno.set_initial()
 
-        eeno = EENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv)
-        eeno.set_initial()
+        #eeno = EENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv)
+        #eeno.set_initial()
 
-        weno = WENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv, rr = 2)
-        weno.set_initial()
+        #weno = WENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv, rr = 2)
+        #weno.set_initial()
+
+        eweno = EWENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv, rr=3)
+        eweno.set_initial()
 
         plt.ion()
         figure = plt.figure()
@@ -142,7 +154,8 @@ if __name__ == '__main__':
         line0, = axis.plot(x, init(x), 'red', label='Analytical Solution')  # Returns a tuple of line objects, thus the comma
         #line1, = axis.plot(eno.xc[2:-2], eno.u[2:-2], color = 'green', label='ENO Solution')  # Returns a tuple of line objects, thus the comma
         #line2, = axis.plot(eeno.xc[5:-5], eeno.u[5:-5], color='blue', label='EENO Solution')  # Returns a tuple of line objects, thus the comma
-        lineWENO, = axis.plot(weno.xc[2:-2], weno.u[2:-2], color='black', label='WENO2 Solution')
+        #lineWENO, = axis.plot(weno.xc[2:-2], weno.u[2:-2], color='black', label='WENO2 Solution')
+        lineEWENO, = axis.plot(eweno.xc[3:-3], eweno.u[3:-3], color='purple', label='E-WENO Solution')
         #lineLW, = axis.plot(x, init(x), color='purple', label='LW Solution')  # Returns a tuple of line objects, thus the comma
 
         plt.ylim(-0.5, 2.5)
@@ -152,40 +165,45 @@ if __name__ == '__main__':
 
         text = plt.text(0, 0, "t = 0")
 
-
-        for i in range(0, Nt-1):
-            text.set_text("t = %f" % t[i])
-            line0.set_ydata(analytic(x, t[i+1]))
-
-            #line1.set_ydata(eno.u[2:-2])
+        t = 0
+        while t <= time:
             #eno.Runge_Kutta()
-
-            #line2.set_ydata(eeno.u[5:-5])
             #eeno.Runge_Kutta()
+            #weno.Runge_Kutta()
+            eweno.Runge_Kutta()
 
-            lineWENO.set_ydata(weno.u[2:-2])
-            weno.Runge_Kutta()
+            text.set_text("t = %f" % (t+dt))
 
+            line0.set_ydata(analytic(x, t+dt))
+            #line1.set_ydata(eno.u[2:-2])
+            #line2.set_ydata(eeno.u[5:-5])
+            #lineWENO.set_ydata(weno.u[2:-2])
+            lineEWENO.set_ydata(eweno.u[3:-3])
             #lineLW.set_ydata(solLW[:, i+1])
 
             figure.canvas.draw()
             figure.canvas.flush_events()
 
+            t += dt
         plt.ioff()
         plt.show()
 
     else:
-        hvals = (.1, 0.1 / 2, 0.1 / 4, 0.1 / 8, 0.1 / 16, 0.1 / 32, 0.1 / 64, 0.1 / 128, 0.1 / 256)
+        Nvals = np.array([10, 20, 40, 80, 160, 320, 640, 1280])
+        hvals = (b - a)/(Nvals - 1) #(.1, 0.1 / 2, 0.1 / 4, 0.1 / 8, 0.1 / 16, 0.1 / 32)#, 0.1 / 64, 0.1 / 128, 0.1 / 256)
         hs = -1
 
         maxerror_ENO = np.zeros((len(hvals), 3))
         maxerror_EENO = np.zeros((len(hvals), 3))
+        maxerror_WENO = np.zeros((len(hvals), 3))
+        maxerror_EWENO = np.zeros((len(hvals), 3))
 
         for dx in hvals:
             hs = hs + 1
             dt = dx / 2
 
-            Nx = int((b - a) / dx) + 1
+            Nx = Nvals[hs]
+            #dx = (b - a)
             Nt = int(time / dt) + 1
 
             x = np.linspace(a, b, Nx)  # discretization of space
@@ -199,18 +217,38 @@ if __name__ == '__main__':
             error_2_EENO = np.zeros(len(t))
             error_inf_EENO = np.zeros(len(t))
 
+            error_1_WENO = np.zeros(len(t))
+            error_2_WENO = np.zeros(len(t))
+            error_inf_WENO = np.zeros(len(t))
+
+            error_1_EWENO = np.zeros(len(t))
+            error_2_EWENO = np.zeros(len(t))
+            error_inf_EWENO = np.zeros(len(t))
+
             eno = ENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv)
             eno.set_initial()
 
             eeno = EENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv)
             eeno.set_initial()
 
-            for t in range(0, Nt-1):
+            weno = WENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv, rr=2)
+            weno.set_initial()
+
+            eweno = EWENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv, rr=3)
+            eweno.set_initial()
+
+            t = 0
+            while t <= time:
                 eno.Runge_Kutta()
                 eeno.Runge_Kutta()
+                weno.Runge_Kutta()
+                eweno.Runge_Kutta()
+                t += dt
 
             tempENO = abs(analytic(x, time) - eno.u[2:-2])
             tempEENO = abs(analytic(x, time) - eeno.u[5:-5])
+            tempWENO = abs(analytic(weno.xc[2:-2], time) - weno.u[2:-2])
+            tempEWENO = abs(analytic(x, time) - eweno.u[3:-3])
 
             maxerror_ENO[hs, 0] = dx * sum(tempENO)
             maxerror_ENO[hs, 1] = pow(dx * sum(pow(tempENO, 2)), 1 / 2)
@@ -220,7 +258,15 @@ if __name__ == '__main__':
             maxerror_EENO[hs, 1] = pow(dx * sum(pow(tempEENO, 2)), 1 / 2)
             maxerror_EENO[hs, 2] = max(tempEENO)
 
-            print("\nMax Error when h = %f" % hvals[hs])
+            maxerror_WENO[hs, 0] = dx * sum(tempWENO)
+            maxerror_WENO[hs, 1] = pow(dx * sum(pow(tempWENO, 2)), 1 / 2)
+            maxerror_WENO[hs, 2] = max(tempWENO)
+
+            maxerror_EWENO[hs, 0] = dx * sum(tempEWENO)
+            maxerror_EWENO[hs, 1] = pow(dx * sum(pow(tempEWENO, 2)), 1 / 2)
+            maxerror_EWENO[hs, 2] = max(tempEWENO)
+
+            print("\nMax Error when N = %d" % Nvals[hs])
             print("ENO Errors:")
             for i in (0, 1):
                 print("\t e_%d = %f" % (i + 1, maxerror_ENO[hs, i]))
@@ -231,7 +277,17 @@ if __name__ == '__main__':
                 print("\t e_%d = %f" % (i + 1, maxerror_EENO[hs, i]))
             print("\t e_inf = %f" % maxerror_EENO[hs, 2])
 
-        logH = np.log(hvals)
+            print("WENO Errors:")
+            for i in (0, 1):
+                print("\t e_%d = %f" % (i + 1, maxerror_WENO[hs, i]))
+            print("\t e_inf = %f" % maxerror_WENO[hs, 2])
+
+            print("EWENO Errors:")
+            for i in (0, 1):
+                print("\t e_%d = %f" % (i + 1, maxerror_EWENO[hs, i]))
+            print("\t e_inf = %f" % maxerror_EWENO[hs, 2])
+
+        logH = np.log2(hvals)
 
         figure, axis = plt.subplots(2, 2)
 
@@ -239,15 +295,23 @@ if __name__ == '__main__':
             figplace1 = (0, 0, 1, 1)
             figplace2 = (0, 1, 0, 1)
 
-            slope_ENO = (-np.log(maxerror_ENO[len(hvals) - 1, i]) + np.log(maxerror_ENO[len(hvals) - 2, i])) / (
+            slope_ENO = (-np.log2(maxerror_ENO[len(hvals) - 1, i]) + np.log2(maxerror_ENO[len(hvals) - 2, i])) / (
                     -logH[len(hvals) - 1] + logH[len(hvals) - 2])
-            slope_EENO = (-np.log(maxerror_EENO[len(hvals) - 1, i]) + np.log(maxerror_EENO[len(hvals) - 2, i])) / (
+            slope_EENO = (-np.log2(maxerror_EENO[len(hvals) - 1, i]) + np.log2(maxerror_EENO[len(hvals) - 2, i])) / (
                     -logH[len(hvals) - 1] + logH[len(hvals) - 2])
+            slope_WENO = (-np.log2(maxerror_WENO[len(hvals) - 1, i]) + np.log2(maxerror_WENO[len(hvals) - 2, i])) / (
+                    -logH[len(hvals) - 1] + logH[len(hvals) - 2])
+            slope_EWENO = (np.log2(maxerror_EWENO[len(hvals) - 1, i]) - np.log2(maxerror_EWENO[len(hvals) - 2, i])) / (
+                    logH[len(hvals) - 1] - logH[len(hvals) - 2])
 
-            axis[figplace1[i], figplace2[i]].plot(-logH, -np.log(maxerror_ENO[:, i]),
+            axis[figplace1[i], figplace2[i]].plot(-logH, -np.log2(maxerror_ENO[:, i]),
                                                   label="ENO_Error - Slope %f" % slope_ENO, color="yellow")
-            axis[figplace1[i], figplace2[i]].plot(-logH, -np.log(maxerror_EENO[:, i]),
+            axis[figplace1[i], figplace2[i]].plot(-logH, -np.log2(maxerror_EENO[:, i]),
                                                   label="EENO_Error - Slope %f" % slope_EENO, color="blue")
+            axis[figplace1[i], figplace2[i]].plot(-logH, -np.log2(maxerror_WENO[:, i]),
+                                                  label="WENO_Error - Slope %f" % slope_WENO, color="black")
+            axis[figplace1[i], figplace2[i]].plot(-logH, -np.log2(maxerror_EWENO[:, i]),
+                                                  label="EWENO_Error - Slope %f" % slope_EWENO, color="purple")
 
             axis[figplace1[i], figplace2[i]].legend()
             if i != 2:
