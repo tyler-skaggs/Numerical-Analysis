@@ -73,6 +73,24 @@ def solver(k, h, init, xbound, tbound, f, fprime, name):
             temp[1:-1] = y[1:-1] - k / h * (f(y[2:]) - f(y[1:-1]))
             y[1:-1] = 1 / 2 * (y[1:-1] + temp[1:-1]) - k / (2 * h) * (f(temp[1:-1]) - f(temp[:-2]))
 
+        elif name == 'CD':
+            def MM(x, y):
+                vals = x.copy()
+                for i in range(len(x)):
+                    vals[i] = 1 / 2 * (np.sign(x[i]) + np.sign(y[i])) * min(np.abs(x[i]), np.abs(y[i]))
+                return vals
+
+            vp = MM(y[2:] - y[1:-1], y[1:-1] - y[:-2])
+            fp = MM(f(y[2:]) - f(y[1:-1]), f(y[1:-1]) - f(y[:-2]))
+            g = f(y[1:-1] - 1/2 * k/h * fp) + 1/8 * h/k * vp
+            g = np.append(g, f(y[-1] - 1/2 * k/h * (f(y[-1]) - f(y[-2]))) + 1/8 * h/k * (y[-1] - y[-2]))
+            g = np.append(f(y[1] - 1 / 2 * k / h * (f(y[1]) - f(y[0]))) + 1 / 8 * h / k * (y[1] - y[0]), g)
+
+            tempL = 1/2 * (y[:-2] + y[1:-1]) - k/h * (g[1:-1] - g[:-2])
+            tempR = 1/2 * (y[1:-1] + y[2:]) - k/h * (g[2:] - g[1:-1])
+
+            y[1:-1] = (tempL + tempR) / 2
+
         else:
             print("Please enter valid method name")
             return 0

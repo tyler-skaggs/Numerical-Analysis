@@ -1,7 +1,9 @@
 import numpy as np
+
 from Solvers import solver
 import matplotlib.pyplot as plt
 from numpy import where
+from scipy.stats import linregress
 from ENO import *
 
 def burgers(x):
@@ -15,12 +17,6 @@ def linear_deriv(x):
         return 1
     else:
         return np.ones(len(x))
-
-def divided_difference(f, u, x):
-    if len(u) == 1:
-        return f(u)
-    else:
-        return ( divided_difference(f, u[1:], x[1:]) - divided_difference(f, u[:-1], x[:-1])) / (x[-1] - x[0])
 
 def analytical1(x, t):
     y = np.zeros(np.size(x))
@@ -104,25 +100,23 @@ def initial_smooth(x):
     return f
 
 if __name__ == '__main__':
-    analytic = analytical1
-
     def init(x):
-        #return np.sin(np.pi * x)
-        return analytic(x,0)
+        return np.sin(np.pi * x)
+        #return analytic(x,0)
 
-    #def analytic(x,t):
-        #return init(x - t)
+    def analytic(x,t):
+        return init(x - t)
 
 
-    problem = burgers
-    deriv = burgers_prime
+    problem = burgers_prime
+    deriv = linear_deriv
 
     dx = 1/50
     dt = dx/2
 
-    a = 0
-    b = 5
-    time = 3
+    a = -1
+    b = 1
+    time = 1
 
     Nx = int((b-a) / dx) + 1
     Nt = int(time / dt) + 1
@@ -130,19 +124,19 @@ if __name__ == '__main__':
     x = np.linspace(a,b,Nx)
     t = np.linspace(0, time, Nt)
 
-    plot = 1
+    plot = 0
 
     if plot == 1:
-        #solLW = solver(dt, dx, init, (a,b), (0,time), problem, deriv, "LW")
+        #solLW = solver(dt, dx, init, (a,b), (0,time), problem, deriv, "CD")
 
-        #eno = ENO(l = a, r = b, dx=dx, dt=dt, init = init, problem = problem, deriv=deriv)
-        #eno.set_initial()
+        eno = ENO(l = a, r = b, dx=dx, dt=dt, init = init, problem = problem, deriv=deriv)
+        eno.set_initial()
 
-        #eeno = EENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv)
-        #eeno.set_initial()
+        eeno = EENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv)
+        eeno.set_initial()
 
-        #weno = WENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv, rr = 2)
-        #weno.set_initial()
+        weno = WENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv, rr = 2)
+        weno.set_initial()
 
         eweno = EWENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv, rr=3)
         eweno.set_initial()
@@ -152,13 +146,13 @@ if __name__ == '__main__':
         axis = figure.add_subplot(111)
 
         line0, = axis.plot(x, init(x), 'red', label='Analytical Solution')  # Returns a tuple of line objects, thus the comma
-        #line1, = axis.plot(eno.xc[2:-2], eno.u[2:-2], color = 'green', label='ENO Solution')  # Returns a tuple of line objects, thus the comma
-        #line2, = axis.plot(eeno.xc[5:-5], eeno.u[5:-5], color='blue', label='EENO Solution')  # Returns a tuple of line objects, thus the comma
-        #lineWENO, = axis.plot(weno.xc[2:-2], weno.u[2:-2], color='black', label='WENO2 Solution')
+        line1, = axis.plot(eno.xc[2:-2], eno.u[2:-2], color = 'green', label='ENO Solution')  # Returns a tuple of line objects, thus the comma
+        line2, = axis.plot(eeno.xc[5:-5], eeno.u[5:-5], color='blue', label='EENO Solution')  # Returns a tuple of line objects, thus the comma
+        lineWENO, = axis.plot(eno.xc[2:-2], weno.u[3:-3], color='black', label='WENO2 Solution')
         lineEWENO, = axis.plot(eweno.xc[3:-3], eweno.u[3:-3], color='purple', label='E-WENO Solution')
-        #lineLW, = axis.plot(x, init(x), color='purple', label='LW Solution')  # Returns a tuple of line objects, thus the comma
+        #lineLW, = axis.plot(x, init(x), color='black', label='CD Solution')  # Returns a tuple of line objects, thus the comma
 
-        plt.ylim(-0.5, 2.5)
+        plt.ylim(-1.5, 1.5)
         plt.legend()
         plt.xlabel("x")
         plt.ylabel("u(x,t)")
@@ -166,30 +160,32 @@ if __name__ == '__main__':
         text = plt.text(0, 0, "t = 0")
 
         t = 0
-        while t <= time:
-            #eno.Runge_Kutta()
-            #eeno.Runge_Kutta()
-            #weno.Runge_Kutta()
+        i = 0
+        while t < time-dt/2:
+            t += dt
+            eno.Runge_Kutta()
+            eeno.Runge_Kutta()
+            weno.Runge_Kutta()
             eweno.Runge_Kutta()
 
-            text.set_text("t = %f" % (t+dt))
+            text.set_text("t = %f" % t)
 
-            line0.set_ydata(analytic(x, t+dt))
-            #line1.set_ydata(eno.u[2:-2])
-            #line2.set_ydata(eeno.u[5:-5])
-            #lineWENO.set_ydata(weno.u[2:-2])
+            line0.set_ydata(analytic(x, t))
+            line1.set_ydata(eno.u[2:-2])
+            line2.set_ydata(eeno.u[5:-5])
+            lineWENO.set_ydata(weno.u[3:-3])
             lineEWENO.set_ydata(eweno.u[3:-3])
             #lineLW.set_ydata(solLW[:, i+1])
 
             figure.canvas.draw()
             figure.canvas.flush_events()
 
-            t += dt
+            i+=1
         plt.ioff()
         plt.show()
 
     else:
-        Nvals = np.array([10, 20, 40, 80, 160, 320, 640, 1280])
+        Nvals = np.array([10, 20, 40])#, 80])#, 160])#, 320])#, 640, 1280])
         hvals = (b - a)/(Nvals - 1) #(.1, 0.1 / 2, 0.1 / 4, 0.1 / 8, 0.1 / 16, 0.1 / 32)#, 0.1 / 64, 0.1 / 128, 0.1 / 256)
         hs = -1
 
@@ -238,16 +234,22 @@ if __name__ == '__main__':
             eweno.set_initial()
 
             t = 0
-            while t <= time:
+            while t < time-dt/2:
                 eno.Runge_Kutta()
                 eeno.Runge_Kutta()
                 weno.Runge_Kutta()
                 eweno.Runge_Kutta()
                 t += dt
 
+            plt.plot(x, analytic(x, time), color = 'red')
+            plt.plot(x, eweno.u[3:-3], color = 'blue')
+            plt.plot(x, eeno.u[5:-5], color = 'purple')
+            plt.plot(x, weno.u[3:-3], color = 'green')
+            plt.show()
+
             tempENO = abs(analytic(x, time) - eno.u[2:-2])
             tempEENO = abs(analytic(x, time) - eeno.u[5:-5])
-            tempWENO = abs(analytic(weno.xc[2:-2], time) - weno.u[2:-2])
+            tempWENO = abs(analytic(x, time) - weno.u[3:-3])
             tempEWENO = abs(analytic(x, time) - eweno.u[3:-3])
 
             maxerror_ENO[hs, 0] = dx * sum(tempENO)
@@ -295,14 +297,18 @@ if __name__ == '__main__':
             figplace1 = (0, 0, 1, 1)
             figplace2 = (0, 1, 0, 1)
 
-            slope_ENO = (-np.log2(maxerror_ENO[len(hvals) - 1, i]) + np.log2(maxerror_ENO[len(hvals) - 2, i])) / (
-                    -logH[len(hvals) - 1] + logH[len(hvals) - 2])
-            slope_EENO = (-np.log2(maxerror_EENO[len(hvals) - 1, i]) + np.log2(maxerror_EENO[len(hvals) - 2, i])) / (
-                    -logH[len(hvals) - 1] + logH[len(hvals) - 2])
-            slope_WENO = (-np.log2(maxerror_WENO[len(hvals) - 1, i]) + np.log2(maxerror_WENO[len(hvals) - 2, i])) / (
-                    -logH[len(hvals) - 1] + logH[len(hvals) - 2])
-            slope_EWENO = (np.log2(maxerror_EWENO[len(hvals) - 1, i]) - np.log2(maxerror_EWENO[len(hvals) - 2, i])) / (
-                    logH[len(hvals) - 1] - logH[len(hvals) - 2])
+            #slope_ENO = (-np.log2(maxerror_ENO[len(hvals) - 1, i]) + np.log2(maxerror_ENO[len(hvals) - 2, i])) / (
+            #        -logH[len(hvals) - 1] + logH[len(hvals) - 2])
+            #slope_EENO = (-np.log2(maxerror_EENO[len(hvals) - 1, i]) + np.log2(maxerror_EENO[len(hvals) - 2, i])) / (
+            #        -logH[len(hvals) - 1] + logH[len(hvals) - 2])
+            #slope_WENO = (-np.log2(maxerror_WENO[len(hvals) - 1, i]) + np.log2(maxerror_WENO[len(hvals) - 2, i])) / (
+            #        -logH[len(hvals) - 1] + logH[len(hvals) - 2])
+            #slope_EWENO = (np.log2(maxerror_EWENO[len(hvals) - 1, i]) - np.log2(maxerror_EWENO[len(hvals) - 2, i])) / (
+            #        logH[len(hvals) - 1] - logH[len(hvals) - 2])
+            slope_ENO = linregress(logH, np.log2(maxerror_ENO[:, i]))[0]
+            slope_EENO = linregress(logH, np.log2(maxerror_EENO[:, i]))[0]
+            slope_WENO = linregress(logH, np.log2(maxerror_WENO[:, i]))[0]
+            slope_EWENO = linregress(logH, np.log2(maxerror_EWENO[:,i]))[0]
 
             axis[figplace1[i], figplace2[i]].plot(-logH, -np.log2(maxerror_ENO[:, i]),
                                                   label="ENO_Error - Slope %f" % slope_ENO, color="yellow")

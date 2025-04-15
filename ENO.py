@@ -5,6 +5,8 @@ from sympy import *
 
 ### This code is based on https://github.com/chairmanmao256/ENO-Linear-advection/blob/main/ENO.py
 
+import numpy as np
+
 class ENO:
     '''
     ### Description
@@ -44,7 +46,7 @@ class ENO:
         self.ur = np.zeros(2 * self.ib + self.ni + 1)
         self.flux = np.zeros(2 * self.ib + self.ni + 1)
 
-        # Newton's devided difference
+        # Newton's divided difference
         self.V = np.zeros((2 * self.ib + self.ni + 1, 3))
         self.global_t = 0.0
 
@@ -180,8 +182,8 @@ class ENO:
             self.ur[i] = cR @ vv
 
         # set the boundary state by using periodic condition
-        self.ul[ib] = self.ENO_weight(-1) @ self.u[ib-1:ib + 2]
-        self.ur[im] = self.ENO_weight(0) @ self.u[im - 1: im+2]
+        self.ul[ib] = self.ul[im]
+        self.ur[im] = self.ur[ib]
 
 
     def LAX_flux(self):
@@ -193,7 +195,6 @@ class ENO:
         self.flux = 1/2 * (self.f(self.ul) + self.f(self.ur) - self.a * (self.ur - self.ul))
 
     def Runge_Kutta(self):
-        self.set_ghost()
         self.u_m = self.u.copy()
 
         alpha1 = [1.0, 3.0 / 4.0, 1.0 / 3.0]
@@ -201,11 +202,14 @@ class ENO:
         alpha3 = [1.0, 1.0 / 4.0, 2.0 / 3.0]
 
         for j in range(3):
+            self.set_ghost()
             self.ENO_reconstruction()
             self.LAX_flux()
-            self.u[self.ib:self.im] = alpha1[j] * self.u_m[self.ib:self.im] + alpha2[j] * self.u[self.ib:self.im] - \
-                                      alpha3[j] * self.dt / self.delx * (
-                                                  self.flux[self.ib + 1:self.im + 1] - self.flux[self.ib:self.im])
+
+            self.u[self.ib:self.im] = \
+                (alpha1[j] * self.u_m[self.ib:self.im] +
+                 alpha2[j] * self.u[self.ib:self.im] -
+                 alpha3[j] * self.dt / self.delx * (self.flux[self.ib + 1:self.im + 1] - self.flux[self.ib:self.im]))
 
         self.global_t += self.dt
         return self.dt
@@ -515,7 +519,7 @@ class WENO:
                      IS_j = pow(self.u[j] - self.u[j-1], 2)
                      IS_jp = pow(self.u[j+1] - self.u[j], 2)
 
-                     if self.fprime(self.u[j]) > 0:
+                     if 1 > 0:
                          a0 = 1/(2 * pow(e + IS_j, 2))
                          a1 = 1/pow(e + IS_jp, 2)
                      else:
@@ -643,11 +647,11 @@ class EWENO:
         '''
         # left boundary
         for k in range(1, self.order):
-            self.u[self.ib - k] = 0#self.u[self.im - k-1]
+            self.u[self.ib - k] = self.u[self.im - k-1]
 
         # right boundary
         for k in range(self.order):
-            self.u[self.im + k] = 1#self.u[self.ib + k+1]
+            self.u[self.im + k] = self.u[self.ib + k+1]
 
 
     def ENO_reconstruction(self):
@@ -743,7 +747,7 @@ class EWENO:
 
 
     def Runge_Kutta(self):
-        if self.r == 2:
+        if self.r == 3:
             self.u_m = self.u.copy()
             alpha1 = [1.0, 3.0 / 4.0, 1.0 / 3.0]
             alpha2 = [0.0, 1.0 / 4.0, 2.0 / 3.0]
