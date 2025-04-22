@@ -1,6 +1,7 @@
 from pickletools import uint2
 
 import numpy as np
+from IPython.testing.decorators import skipif
 from sympy import *
 
 ### This code is based on https://github.com/chairmanmao256/ENO-Linear-advection/blob/main/ENO.py
@@ -222,7 +223,7 @@ class EENO:
     reconstruction scheme of order 3.
     '''
 
-    def __init__(self, l, r, dx, dt, problem, deriv, init, order=3):
+    def __init__(self, l, r, dx, dt, problem, deriv, init, order=4, method = 'RF'):
         '''
         ### Description
         Initialize the ENO_advection class with:
@@ -231,17 +232,19 @@ class EENO:
         `ni`: The number of internal cells. Default value is 100.
         '''
 
-        self.order = order
-        self.ib = 5  # k-th order scheme requires k+2 ghost cells
+        self.r = order + 1
+        self.ib = self.r + 2  # k-th order scheme requires k+2 ghost cells
         self.ni = int((r - l) / dx) + 1
         self.im = self.ni + self.ib  # to iterate through all the internal cells: for i in range(ib, im)
         self.f = problem
+        self.deriv = deriv
         self.init = init
         self.dx = dx
         self.dt = dt
-        self.m = 2
+        self.method = method
 
         self.u = np.zeros(2 * self.ib + self.ni)  # solution vector
+        self.uplot = np.zeros(self.ni)
         self.u_m = np.zeros_like(self.u)  # stores the middle step (previous solution) in Runge-Kutta scheme
 
         ib = self.ib
@@ -256,8 +259,9 @@ class EENO:
         self.flux = np.zeros(self.ni)
 
         # Newton's divided difference
-        self.VPlus = np.zeros((2 * self.ib + self.ni + 1, 2*self.m+2))
-        self.VMinus = np.zeros((2 * self.ib + self.ni + 1, 2*self.m+2))
+        self.HPlus = np.zeros((2 * self.ib + self.ni + 1, self.r + 2))
+        self.HMinus = np.zeros((2 * self.ib + self.ni + 1, self.r + 2))
+        self.H = np.zeros((2 * self.ib + self.ni + 1, 2 * self.r + 2))
 
         self.global_t = 0.0
 
@@ -276,51 +280,43 @@ class EENO:
         Set the value in the boundary ghost cells based on a periodic initial condition
         '''
         # left boundary
-        for k in range(1, self.order):
+        for k in range(1, self.r):
             self.u[self.ib - k] = self.u[self.im - k-1]
 
         # right boundary
-        for k in range(self.order):
+        for k in range(self.r):
             self.u[self.im + k] = self.u[self.ib + k+1]
 
     def NDD(self):
-        '''
-        ### Description
-
-        Compute the Newton Divde Difference of the function value array.
-        Function value array is stored on the cell centers.
-
-            +--------+
-            |        |
-        i> |  u[i]  | <i+1
-            |        |
-            +--------+
-
-        ib is the starting index of the internal cells. It also equals to
-        the ghost cells used.
-
-        We only compute the Diveded Difference to the order 3:
-        V[x_{i-1/2}, x_{i+1/2}, x_{i+3/2}, x_{i+5/2}]
-
-        We also assume uniform cell length: \Delta x = const.
-        '''
         nn = self.u.shape[0]  # total number of cells, including the ghost cells
 
-        self.VPlus = np.zeros((nn + 1, 2*self.m+2))
-        self.VPlus[0:nn, 0] = 1/2*(self.f(self.u.copy()) + self.alpha * self.u.copy())
+        def h(a, b):
+            return 1/2 * (self.f(a) + self.f(b) - (b - a))
+            #ahat = (self.f(b) - self.f(a)) / (b - a)
+            #if ahat > 0:
+            #    return(self.f(a))
+            #else:
+            #    return(self.f(b))
 
-        self.VMinus = np.zeros((nn + 1, 2*self.m+2))
-        self.VMinus[0:nn, 0] = 1/2*(self.f(self.u.copy()) - self.alpha * self.u.copy())
+        self.HPlus[0:nn, 0] = self.f(self.u.copy()) #1/2*(self.f(self.u.copy()) + self.alpha * self.u.copy())
 
-        for k in range(1, 2 * self.m + 1):
-            self.VPlus[0:nn - k, k] = (self.VPlus[1:nn - (k - 1), k - 1] - self.VPlus[0:nn - k, k - 1]) / (k*self.dx)
-            self.VMinus[0:nn - k, k] = (self.VMinus[1:nn - (k - 1), k - 1] - self.VMinus[0:nn - k, k - 1]) / (k*self.dx)
-            # order-(k+1): V[x_{i-1/2}, x_{i+1/2},..., x_{i+k+1/2}]
+        self.HMinus[0:nn, 0] = self.f(self.u.copy())# 1/2*(self.f(self.u.copy()) - self.alpha * self.u.copy())
+
+        self.H[0:nn, 0] = self.f(self.u.copy())
+
+        for i in range(0, nn-1):
+            self.HPlus[i, 1] = (self.f(self.u[i+1]) - h(self.u[i], self.u[i+1]))/self.dx
+            self.HMinus[i, 1] = (h(self.u[i], self.u[i+1]) - self.f(self.u[i]))/self.dx
+
+        for k in range(2, self.r + 2):
+            self.H[0:nn - k, k] = (self.H[1:nn - (k - 1), k - 1] - self.H[0:nn - k, k - 1]) / (k+1)
+            self.HPlus[0:nn - k, k] = (self.HPlus[1:nn - (k - 1), k - 1] - self.HPlus[0:nn - k, k - 1]) / (self.dx*k)
+            self.HMinus[0:nn - k, k] = (self.HMinus[1:nn - (k - 1), k - 1] - self.HMinus[0:nn - k, k - 1]) / (self.dx*k)
 
     def ENO_reconstruction(self):
         '''
         ### Description:
-
+ v
         Perform ENO reconstruction cell-wise
         '''
         ib, im = self.ib, self.im
@@ -329,57 +325,91 @@ class EENO:
 
         # reconstruct on internal cell faces, cell by cell
         for j in range(ib-1, im+1):
-            # initial stencil
-            k_P = np.array([j])
-            k_M = np.array([j+1])
-
-            Q_Plus = 1/2 * (self.f(self.u[j]) + self.alpha * self.u[j])
-            Q_Minus = 1/2 * (self.f(self.u[j+1]) - self.alpha * self.u[j+1])
-
-            for n in range(2*self.m+1):  # the number of interfaces in the stencil
-                ### For Q_plus
-                a = self.VPlus[k_P[0], n + 1]  # note that subscript n+1 retrives order n+2 divided difference
-                b = self.VPlus[k_P[0]-1, n + 1]
-                prod = 1
-
-                if abs(a) < abs(b):
-                    c = a
-                    for k in k_P:
-                        prod *= (self.xc[j] - self.xc[k] + self.dx/2)
-                    k_P = np.append(k_P, k_P[-1] + 1)
+            if self.method == 'F':
+                abar = (self.f(self.u[j+1]) - self.f(self.u[j])) / (self.u[j+1] - self.u[j])
+                #kvals = np.zeros(self.r+1)
+                kmin = 0
+                if abar >= 0:
+                    kmin = j #kvals[0] = j
                 else:
-                    c = b
-                    for k in k_P:
-                        prod *= (self.xc[j] - self.xc[k] + self.dx/2)
-                    k_P = np.append(k_P[0]-1, k_P)
+                    kmin = j+1 #kvals[0] = j+1
 
-                Q_Plus += c * prod
+                z = symbols('z')
+                Q = self.H[kmin, 0] * (z - (self.xc[kmin] - self.dx/2))
 
-                ### For Q_minus
-                a = self.VMinus[k_M[0], n + 1]  # note that subscript n+1 retrives order n+2 divided difference
-                b = self.VMinus[k_M[0] - 1, n + 1]
-                prod = 1
+                for l in range(2, self.r+2):
+                    a = self.H[kmin, l]
+                    b = self.H[kmin-1, l]
+                    c = 0
+                    kprev = kmin
 
-                if abs(a) < abs(b):
-                    c = a
-                    for k in k_M:
-                        prod *= (self.xc[j] - self.xc[k] + self.dx/2)
-                    k_M = np.append(k_M, k_M[-1] + 1)
-                else:
-                    c = b
-                    for k in k_M:
-                        prod *= (self.xc[j] - self.xc[k] + self.dx/2)
-                    k_M = np.append(k_M[0] - 1, k_M)
+                    if np.abs(a) >= np.abs(b):
+                        c = b
+                        kmin = kmin - 1#kvals = np.append(kvals[0]-1, kvals)
+                    else:
+                        c = a
+                        #kvals = np.append(kvals, kvals[-1] + 1)
+                    k = kprev
+                    temp = 1
+                    while k <= kprev + l - 1:
+                        temp *= (z - (self.xc[k] - self.dx/2))
+                        k += 1
 
-                Q_Minus += c * prod
+                    Q += c*temp
 
-            self.p_plus[j] = Q_Plus
-            self.p_minus[j] = Q_Minus
+                self.f_hat[j] = diff(Q, z).subs(z, self.xc[j] + self.dx/2)
 
-            self.f_hat[j] = Q_Plus + Q_Minus
+            else:
+                # initial stencil
+                k_P = np.array([j])
+                k_M = np.array([j+1])
 
-        # set the boundary state by using periodic condition
-        #self.f_hat[ib-1] = self.f_hat[im-1]
+                alpha = max(abs(self.deriv(self.u)))
+
+                Q_Plus = 1/2 * (self.f(self.u[j]) + alpha * self.u[j])
+                Q_Minus = 1/2 * (self.f(self.u[j+1]) - alpha * self.u[j+1])
+
+                for n in range(self.r+1):  # the number of interfaces in the stencil
+                    ### For Q_plus
+                    a = self.HPlus[k_P[0], n + 1]  # note that subscript n+1 retrives order n+2 divided difference
+                    b = self.HPlus[k_P[0]-1, n + 1]
+                    prod = 1
+
+                    if abs(a) < abs(b):
+                        c = a
+                        for k in k_P:
+                            prod *= (self.xc[j] - self.xc[k] + self.dx/2)
+                        k_P = np.append(k_P, k_P[-1] + 1)
+                    else:
+                        c = b
+                        for k in k_P:
+                            prod *= (self.xc[j] - self.xc[k] + self.dx/2)
+                        k_P = np.append(k_P[0]-1, k_P)
+
+                    Q_Plus += c * prod
+
+                    ### For Q_minus
+                    a = self.HMinus[k_M[0], n + 1]  # note that subscript n+1 retrives order n+2 divided difference
+                    b = self.HMinus[k_M[0] - 1, n + 1]
+                    prod = 1
+
+                    if abs(a) < abs(b):
+                        c = a
+                        for k in k_M:
+                            prod *= (self.xc[j] - self.xc[k] + self.dx/2)
+                        k_M = np.append(k_M, k_M[-1] + 1)
+                    else:
+                        c = b
+                        for k in k_M:
+                            prod *= (self.xc[j] - self.xc[k-1] + self.dx/2)
+                        k_M = np.append(k_M[0] - 1, k_M)
+
+                    Q_Minus += c * prod
+
+                self.p_plus[j] = Q_Plus
+                self.p_minus[j] = Q_Minus
+
+                self.f_hat[j] = Q_Plus + Q_Minus
 
 
     def approx_flux(self):
@@ -388,24 +418,54 @@ class EENO:
 
         Compute the L-F flux based on the reconstructed values
         '''
-        self.flux = self.f_hat[self.ib:self.im] - self.f_hat[(self.ib-1):(self.im-1)]
-
+        self.flux = -1/self.dx * (self.f_hat[self.ib:self.im] - self.f_hat[(self.ib-1):(self.im-1)])
 
     def Runge_Kutta(self):
-        self.u_m = self.u.copy()
+        if self.r == 4:
+            self.u_m = self.u.copy()
+            alpha1 = [1.0, 3.0 / 4.0, 1.0 / 3.0]
+            alpha2 = [0.0, 1.0 / 4.0, 2.0 / 3.0]
+            alpha3 = [1.0, 1.0 / 4.0, 2.0 / 3.0]
 
-        alpha1 = [1.0, 3.0 / 4.0, 1.0 / 3.0]
-        alpha2 = [0.0, 1.0 / 4.0, 2.0 / 3.0]
-        alpha3 = [1.0, 1.0 / 4.0, 2.0 / 3.0]
+            for j in range(3):
+                self.set_ghost()
+                self.ENO_reconstruction()
+                self.approx_flux()
+                self.u[self.ib:self.im] = (alpha1[j] * self.u_m[self.ib:self.im] +
+                                           alpha2[j] * self.u[self.ib:self.im] +
+                                           alpha3[j] * self.dt * self.flux)
 
-        for j in range(3):
-            self.set_ghost()
-            self.ENO_reconstruction()
-            self.approx_flux()
-            self.u[self.ib:self.im] = alpha1[j] * self.u_m[self.ib:self.im] + alpha2[j] * self.u[self.ib:self.im] - \
-                                      alpha3[j] * self.dt / self.dx * self.flux
+        else:
+            uk = [self.u.copy(), self.u.copy(), self.u.copy(), self.u.copy(), self.u.copy()]
+            Lk = [self.flux, self.flux, self.flux, self.flux]
 
-        self.global_t += self.dt
+            alpha0 = [1, 1, 1, -1 / 3]  # [1, 1/2, 1/9, 0]
+            alpha1 = [0, 0, 0, 1 / 3]  # [0, 1/2, 2/9, 1/3]
+            alpha2 = [0, 0, 0, 2 / 3]  # [0, 0, 2/3, 1/3]
+            alpha3 = [0, 0, 0, 1 / 3]  # [0, 0, 0, 1/3]
+            alphaL0 = [1 / 2, 0, 0, 0]  # [1/2, -1/4, -1/9, 0]
+            alphaL1 = [0, 1 / 2, 0, 0]  # [0, 1/2, -1/3, 1/6]
+            alphaL2 = [0, 0, 1, 0]  # [0, 0, 1, 0]
+            alphaL3 = [0, 0, 0, 1 / 6]  # [0, 0, 0, 1/6]
+
+            for j in range(4):
+                self.set_ghost()
+                self.ENO_reconstruction()
+                self.approx_flux()
+                Lk[j] = self.flux
+                uk[j + 1][self.ib:self.im] = \
+                    (alpha0[j] * uk[0][self.ib:self.im] +
+                     alpha1[j] * uk[1][self.ib:self.im] +
+                     alpha2[j] * uk[2][self.ib:self.im] +
+                     alpha3[j] * uk[3][self.ib:self.im] +
+                     alphaL0[j] * self.dt * Lk[0]+
+                     alphaL1[j] * self.dt * Lk[1] +
+                     alphaL2[j] * self.dt * Lk[2] +
+                     alphaL3[j] * self.dt * Lk[3])
+
+                self.u[self.ib:self.im] = uk[j + 1].copy()[self.ib:self.im]
+
+        self.uplot = self.u[self.ib:self.im]
         return self.dt
 
 class WENO:
@@ -624,8 +684,6 @@ class EWENO:
         ib = self.ib
         self.xc = np.linspace(l - ib * self.dx, r + ib * self.dx, 2 * self.ib + self.ni)
 
-        self.alpha = max(abs(deriv(self.u)))
-
         # interface values
         self.L = np.zeros(2 * self.ib + self.ni)
         self.f_plus = np.zeros(2 * self.ib + self.ni)
@@ -680,8 +738,9 @@ class EWENO:
                 sum += a[r - 2, k, l] * g[l]
             return sum
 
-        fl_plus = 1/2 * (self.f(self.u) + self.alpha * self.u)
-        fl_minus = 1/2 * (self.f(self.u) - self.alpha * self.u)
+        alpha = max(abs(self.fprime(self.u)))
+        fl_plus = 1/2 * (self.f(self.u) + alpha * self.u)
+        fl_minus = 1/2 * (self.f(self.u) - alpha * self.u)
 
         for j in range(ib-1, im+1):
 
@@ -765,13 +824,13 @@ class EWENO:
             uk = [self.u.copy(), self.u.copy(), self.u.copy(), self.u.copy(), self.u.copy()]
             Lk = [self.u.copy(), self.u.copy(), self.u.copy(), self.u.copy()]
 
-            alpha0 = [1, 1, 1, -1/3] #[1, 1/2, 1/9, 0]
-            alpha1 = [0, 0, 0, 1/3] #[0, 1/2, 2/9, 1/3]
-            alpha2 = [0, 0, 0, 2/3] #[0, 0, 2/3, 1/3]
-            alpha3 = [0, 0, 0, 1/3] #[0, 0, 0, 1/3]
-            alphaL0 = [1/2, 0, 0, 0]#[1/2, -1/4, -1/9, 0]
+            alpha0 =  [1, 1, 1, -1/3] #[1, 1/2, 1/9, 0]
+            alpha1 =  [0, 0, 0, 1/3]  #[0, 1/2, 2/9, 1/3]
+            alpha2 =  [0, 0, 0, 2/3]  #[0, 0, 2/3, 1/3]
+            alpha3 =  [0, 0, 0, 1/3]  #[0, 0, 0, 1/3]
+            alphaL0 = [1/2, 0, 0, 0] #[1/2, -1/4, -1/9, 0]
             alphaL1 = [0, 1/2, 0, 0] #[0, 1/2, -1/3, 1/6]
-            alphaL2 = [0, 0, 1, 0] #[0, 0, 1, 0]
+            alphaL2 = [0, 0, 1, 0]   #[0, 0, 1, 0]
             alphaL3 = [0, 0, 0, 1/6] #[0, 0, 0, 1/6]
 
 
