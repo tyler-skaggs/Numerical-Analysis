@@ -680,6 +680,7 @@ class EWENO:
 
         self.u = np.zeros(2 * self.ib + self.ni)  # solution vector
         self.u_m = np.zeros_like(self.u)  # stores the middle step (previous solution) in Runge-Kutta scheme
+        self.uplot = np.zeros(self.ni)
 
         ib = self.ib
         self.xc = np.linspace(l - ib * self.dx, r + ib * self.dx, 2 * self.ib + self.ni)
@@ -806,7 +807,7 @@ class EWENO:
 
 
     def Runge_Kutta(self):
-        if self.r == 3:
+        if self.r == 0:
             self.u_m = self.u.copy()
             alpha1 = [1.0, 3.0 / 4.0, 1.0 / 3.0]
             alpha2 = [0.0, 1.0 / 4.0, 2.0 / 3.0]
@@ -821,6 +822,31 @@ class EWENO:
                                            alpha3[j] * self.dt * self.L[self.ib:self.im])
 
         else:
+            """self.set_ghost()
+            self.ENO_reconstruction()
+            self.setL()
+            y0 = self.u.copy()
+
+            self.u = y0 + 1 / 2 * self.dt * self.L
+            y1 = self.u.copy()
+
+            self.set_ghost()
+            self.ENO_reconstruction()
+            self.setL()
+            self.u = y0 + 1 / 2 * self.dt * self.L
+            y2 = self.u.copy()
+
+            self.set_ghost()
+            self.ENO_reconstruction()
+            self.setL()
+            self.u = y0 + self.dt * self.L
+            y3 = self.u.copy()
+
+            self.set_ghost()
+            self.ENO_reconstruction()
+            self.setL()
+            self.u[self.ib:self.im] = (1 / 3 * (-y0 + y1 + 2 * y2 + y3) + 1 / 6 * self.dt * self.L)[self.ib:self.im]"""
+
             uk = [self.u.copy(), self.u.copy(), self.u.copy(), self.u.copy(), self.u.copy()]
             Lk = [self.u.copy(), self.u.copy(), self.u.copy(), self.u.copy()]
 
@@ -849,6 +875,6 @@ class EWENO:
                         alphaL2[j] * self.dt * Lk[2][self.ib:self.im] +
                         alphaL3[j] * self.dt * Lk[3][self.ib:self.im])
 
-                self.u[self.ib:self.im] = uk[j+1].copy()[self.ib:self.im]
-
+                self.u = uk[j+1].copy()
+                self.uplot = self.u[self.ib:self.im]
         return self.dt

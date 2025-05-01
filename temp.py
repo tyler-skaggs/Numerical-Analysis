@@ -125,7 +125,7 @@ if __name__ == '__main__':
     x = np.linspace(a,b,Nx)
     t = np.linspace(0, time, Nt)
 
-    plot = 0
+    plot = 1
 
     if plot == 1:
         #solLW = solver(dt, dx, init, (a,b), (0,time), problem, deriv, "CD")
@@ -150,7 +150,7 @@ if __name__ == '__main__':
         #line1, = axis.plot(eno.xc[2:-2], eno.u[2:-2], color = 'green', label='ENO Solution')  # Returns a tuple of line objects, thus the comma
         line2, = axis.plot(x, eeno.uplot, color='blue', label='EENO Solution')  # Returns a tuple of line objects, thus the comma
         #lineWENO, = axis.plot(eno.xc[2:-2], weno.u[3:-3], color='black', label='WENO2 Solution')
-        lineEWENO, = axis.plot(eweno.xc[3:-3], eweno.u[3:-3], color='purple', label='E-WENO Solution')
+        lineEWENO, = axis.plot(x, eweno.uplot, color='purple', label='E-WENO Solution')
         #lineLW, = axis.plot(x, init(x), color='black', label='CD Solution')  # Returns a tuple of line objects, thus the comma
 
         plt.ylim(-1.5, 1.5)
@@ -243,8 +243,8 @@ if __name__ == '__main__':
                 t += dt
 
             plt.plot(x, analytic(x, t), color = 'red')
-            plt.plot(x, eweno.u[3:-3], color = 'blue')
-            plt.plot(x, eeno.uplot, color = 'purple')
+            plt.plot(x, eweno.u[3:-3], color = 'purple')
+            plt.plot(x, eeno.uplot, color = 'blue')
             #plt.plot(x, weno.u[3:-3], color = 'green')
             plt.show()
 
