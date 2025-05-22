@@ -1,5 +1,4 @@
 import numpy as np
-
 from Solvers import solver
 import matplotlib.pyplot as plt
 from numpy import where
@@ -101,8 +100,9 @@ def initial_smooth(x):
 
 if __name__ == '__main__':
 
+
     def init(x):
-        return np.sin(np.pi * x)
+        return np.sin(np.pi * x) ** 4
         #return analytic(x,0)
 
     def analytic(x,t):
@@ -113,11 +113,11 @@ if __name__ == '__main__':
     deriv = linear_deriv
 
     dx = 1/20
-    dt = pow(dx, 5/4)
+    dt = dx*0.5
 
     a = 0
     b = 2
-    time = 2
+    time = 1
 
     Nx = int((b-a) / dx) + 1
     Nt = int(time / dt) + 1
@@ -125,7 +125,7 @@ if __name__ == '__main__':
     x = np.linspace(a,b,Nx)
     t = np.linspace(0, time, Nt)
 
-    plot = 1
+    plot = 0
 
     if plot == 1:
         #solLW = solver(dt, dx, init, (a,b), (0,time), problem, deriv, "CD")
@@ -133,7 +133,7 @@ if __name__ == '__main__':
         #eno = ENO(l = a, r = b, dx=dx, dt=dt, init = init, problem = problem, deriv=deriv)
         #eno.set_initial()
 
-        eeno = EENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv)
+        eeno = EENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv, method='RF')
         eeno.set_initial()
 
         #weno = WENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv, rr = 2)
@@ -186,7 +186,7 @@ if __name__ == '__main__':
         plt.show()
 
     else:
-        Nvals = np.array([10, 20, 40, 80, 160])#, 320])#, 640, 1280])
+        Nvals = np.array([40, 80, 160, 320])#, 640, 1280])
         hvals = (b - a)/(Nvals - 1) #(.1, 0.1 / 2, 0.1 / 4, 0.1 / 8, 0.1 / 16, 0.1 / 32)#, 0.1 / 64, 0.1 / 128, 0.1 / 256)
         hs = -1
 
@@ -225,7 +225,7 @@ if __name__ == '__main__':
             eno = ENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv)
             eno.set_initial()
 
-            eeno = EENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv)
+            eeno = EENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv, order=4, method='RF')
             eeno.set_initial()
 
             weno = WENO(l=a, r=b, dx=dx, dt=dt, init=init, problem=problem, deriv=deriv, rr=2)
@@ -235,18 +235,20 @@ if __name__ == '__main__':
             eweno.set_initial()
 
             t = 0
-            while t < time-dt/2:
+            while t < time:
                 #eno.Runge_Kutta()
-                eeno.Runge_Kutta()
+                #eeno.Runge_Kutta()
                 #weno.Runge_Kutta()
                 eweno.Runge_Kutta()
                 t += dt
 
-            plt.plot(x, analytic(x, t), color = 'red')
-            plt.plot(x, eweno.u[3:-3], color = 'purple')
-            plt.plot(x, eeno.uplot, color = 'blue')
+            plt.plot(x, analytic(x, t), color = 'red', label="Analytic")
+            plt.plot(x, eweno.uplot, color = 'purple', label='E-WENO')
+            plt.plot(x, eeno.uplot, color = 'blue', label='E-ENO')
             #plt.plot(x, weno.u[3:-3], color = 'green')
+            plt.legend()
             plt.show()
+
 
             tempENO = abs(analytic(x, t) - eno.u[2:-2])
             tempEENO = abs(analytic(x, t) - eeno.uplot)

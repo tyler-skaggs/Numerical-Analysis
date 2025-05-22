@@ -309,16 +309,13 @@ class EENO:
             self.HMinus[i, 1] = (h(self.u[i], self.u[i+1]) - self.f(self.u[i]))/self.dx
 
         for k in range(2, self.r + 2):
-            self.H[0:nn - k, k] = (self.H[1:nn - (k - 1), k - 1] - self.H[0:nn - k, k - 1]) / (k+1)
+            self.H[0:nn - k, k] = (self.H[1:nn - (k - 1), k - 1] - self.H[0:nn - k, k - 1]) / (self.dx*(k))
             self.HPlus[0:nn - k, k] = (self.HPlus[1:nn - (k - 1), k - 1] - self.HPlus[0:nn - k, k - 1]) / (self.dx*k)
             self.HMinus[0:nn - k, k] = (self.HMinus[1:nn - (k - 1), k - 1] - self.HMinus[0:nn - k, k - 1]) / (self.dx*k)
 
+
     def ENO_reconstruction(self):
-        '''
-        ### Description:
- v
-        Perform ENO reconstruction cell-wise
-        '''
+
         ib, im = self.ib, self.im
         # compute the NDD first
         self.NDD()
@@ -345,7 +342,7 @@ class EENO:
 
                     if np.abs(a) >= np.abs(b):
                         c = b
-                        kmin = kmin - 1#kvals = np.append(kvals[0]-1, kvals)
+                        kmin = kmin - 1 #kvals = np.append(kvals[0]-1, kvals)
                     else:
                         c = a
                         #kvals = np.append(kvals, kvals[-1] + 1)
@@ -355,7 +352,7 @@ class EENO:
                         temp *= (z - (self.xc[k] - self.dx/2))
                         k += 1
 
-                    Q += c*temp
+                    Q += c * temp
 
                 self.f_hat[j] = diff(Q, z).subs(z, self.xc[j] + self.dx/2)
 
@@ -421,7 +418,7 @@ class EENO:
         self.flux = -1/self.dx * (self.f_hat[self.ib:self.im] - self.f_hat[(self.ib-1):(self.im-1)])
 
     def Runge_Kutta(self):
-        if self.r == 4:
+        if self.r == 0:
             self.u_m = self.u.copy()
             alpha1 = [1.0, 3.0 / 4.0, 1.0 / 3.0]
             alpha2 = [0.0, 1.0 / 4.0, 2.0 / 3.0]
