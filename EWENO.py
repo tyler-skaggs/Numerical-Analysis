@@ -3,6 +3,9 @@ import numpy as np
 from numpy import where
 from scipy.stats import linregress
 
+from temp import analytical1, analytical2, analytical3
+
+
 def burgers(x):
     return pow(x, 2) / 2
 
@@ -16,7 +19,6 @@ def linear_deriv(x):
         return np.ones(len(x))
 
 def EWENO(x, u, dx, dt, problem, deriv, r):
-    alpha = 1
     unew = u.copy()
 
     a = np.array([[[-1 / 2, 3 / 2, 0], [1 / 2, 1 / 2, 0], [0, 0, 0]],
@@ -41,7 +43,16 @@ def EWENO(x, u, dx, dt, problem, deriv, r):
         for k in range(r):
             u[len(x) - r + k] = u[r + k+1]
 
-        fl = problem(u)
+        fl = u.copy()
+        for j in range(len(u)-1):
+            ran = deriv(np.linspace(u[j], u[j+1], 100))
+            alpha = max(abs(ran))
+            if min(ran) > 0:
+                fl[j] = problem(u[j])
+            elif max(ran) < 0:
+                fl[j] = problem(u[j+1])
+            else:
+                fl[j] = 1/2 * (problem(u[j]) + problem(u[j+1]) - alpha * (u[j+1] - u[j]))
 
         for j in range(r-1, len(x) - r + 1):
             IS0 = ( 13/12 * np.power(fl[j-2] - 2 * fl[j-1] + fl[j], 2) +
@@ -70,34 +81,56 @@ def EWENO(x, u, dx, dt, problem, deriv, r):
 
         return L
 
-    alpha0 = [1, 1, 1, -1 / 3]  # [1, 1/2, 1/9, 0]
-    alpha1 = [0, 0, 0, 1 / 3]  # [0, 1/2, 2/9, 1/3]
-    alpha2 = [0, 0, 0, 2 / 3]  # [0, 0, 2/3, 1/3]
-    alpha3 = [0, 0, 0, 1 / 3]  # [0, 0, 0, 1/3]
-    alphaL0 = [1 / 2, 0, 0, 0]  # [1/2, -1/4, -1/9, 0]
-    alphaL1 = [0, 1 / 2, 0, 0]  # [0, 1/2, -1/3, 1/6]
-    alphaL2 = [0, 0, 1, 0]  # [0, 0, 1, 0]
-    alphaL3 = [0, 0, 0, 1 / 6]  # [0, 0, 0, 1/6]
-    uk = [u.copy(), u.copy(), u.copy(), u.copy(), u.copy()]
-    Lk = [u.copy(), u.copy(), u.copy(), u.copy()]
-    for k in range(4):
+    """alpha0 = [1, 3/4, 3/8, 1/4, 89537/2880000, 4/9] #[1, 1, 1, -1/3, 0, 0]
+    alpha1 = [0, 1/4, 1/8, 1/8, 407023/2880000, 1/15] #[0, 0, 0, 1/3, 0, 0]
+    alpha2 = [0, 0, 1/2, 1/8, 1511/12000, 0] #[0, 0, 0, 2/3, 0, 0]
+    alpha3 = [0, 0, 0, 1/2, 87/200, 8/45] #[0, 0, 0, 1/3, 0, 0]
+    alpha4 = [0, 0, 0, 0, 4/15, 0] #[0, 0, 0, 0, 0, 0]
+    alpha5 = [0, 0, 0, 0, 0, 14/45] #[0, 0, 0, 0, 0, 0]
+    alphaL0 = [1/2, 0, -1/8, -5/64, 2276219/40320000, 0] #[1/2, 0, 0, 0, 0, 0]
+    alphaL1 = [0, 1/8, -1/16, -13/64, 407023/672000, -8/45] #[0, 1/2, 0, 0, 0, 0]
+    alphaL2 = [0, 0, 1/2, 1/8, 1511/2800, 0] #[0, 0, 1, 0, 0, 0]
+    alphaL3 = [0, 0, 0, 9/16, -261/140, 2/3] #[0, 0, 0, 1/6, 0, 0]
+    alphaL4 = [0, 0, 0, 0, 8/7, 0] #[0, 0, 0, 0, 0, 0]
+    alphaL5 = [0, 0, 0, 0, 0, 7/90] #[0, 0, 0, 0, 0, 0]"""
+
+    alpha0 = [1, 1, 1, -1/3, 0, 0]
+    alpha1 = [0, 0, 0, 1/3, 0, 0]
+    alpha2 = [0, 0, 0, 2/3, 0, 0]
+    alpha3 = [0, 0, 0, 1/3, 0, 0]
+    alpha4 = [0, 0, 0, 0, 1, 0]
+    alpha5 = [0, 0, 0, 0, 0, 1]
+    alphaL0 = [1/2, 0, 0, 0, 0, 0]
+    alphaL1 = [0, 1/2, 0, 0, 0, 0]
+    alphaL2 = [0, 0, 1, 0, 0, 0]
+    alphaL3 = [0, 0, 0, 1/6, 0, 0]
+    alphaL4 = [0, 0, 0, 0, 0, 0]
+    alphaL5 = [0, 0, 0, 0, 0, 0]
+
+
+    uk = [u.copy(), u.copy(), u.copy(), u.copy(), u.copy(), u.copy(), u.copy()]
+    Lk = [u.copy(), u.copy(), u.copy(), u.copy(), u.copy(), u.copy()]
+    for k in range(6):
         Lk[k][r:-r] = L(unew)
         uk[k + 1][r:-r] = \
             (alpha0[k] * uk[0][r:-r] +
              alpha1[k] * uk[1][r:-r] +
              alpha2[k] * uk[2][r:-r] +
              alpha3[k] * uk[3][r:-r] +
+             alpha4[k] * uk[4][r:-r] +
+             alpha5[k] * uk[5][r:-r] +
              alphaL0[k] * dt * Lk[0][r:-r] +
              alphaL1[k] * dt * Lk[1][r:-r] +
              alphaL2[k] * dt * Lk[2][r:-r] +
-             alphaL3[k] * dt * Lk[3][r:-r])
+             alphaL3[k] * dt * Lk[3][r:-r] +
+             alphaL4[k] * dt * Lk[4][r:-r] +
+             alphaL5[k] * dt * Lk[5][r:-r])
 
         unew = uk[k + 1].copy()
 
     return unew
 
 if __name__ == '__main__':
-
 
     def init(x):
         return np.sin(np.pi * x)**4
@@ -111,11 +144,11 @@ if __name__ == '__main__':
     deriv = linear_deriv
 
     dx = 1/20
-    dt = np.power(dx, 5/4)
+    dt = dx/2 #np.power(dx, 5/4)
 
     a = -1
     b = 1
-    time = 2
+    time = 1
     r = 3
 
     Nx = int((b-a) / dx) + 1
@@ -125,7 +158,7 @@ if __name__ == '__main__':
     xc = np.linspace(a - r * dx, b + r * dx, 2*r + Nx)
     t = np.linspace(0, time, Nt)
 
-    plot = 1
+    plot = 0
 
     if plot == 1:
 
@@ -138,7 +171,7 @@ if __name__ == '__main__':
         line0, = axis.plot(x, init(x), 'red', label='Analytical Solution')
         lineEWENO, = axis.plot(x, ewenoSOL[r:-r], color='purple', label='E-WENO Solution')
 
-        plt.ylim(-1.5, 1.5)
+        plt.ylim(-0.5, 2.5)
         plt.legend()
         plt.xlabel("x")
         plt.ylabel("u(x,t)")
@@ -147,7 +180,7 @@ if __name__ == '__main__':
 
         t = 0
         i = 0
-        while t < time:
+        while t < time-dt/2:
             ewenoSOL = EWENO(xc, ewenoSOL, dx, dt, problem, deriv, r)
             t += dt
             text.set_text("t = %f" % t)
@@ -174,7 +207,7 @@ if __name__ == '__main__':
 
         for dx in hvals:
             hs = hs + 1
-            dt = dx/2 #np.power(dx, 5/4)
+            dt = dx/2
 
             Nx = Nvals[hs]
             Nt = int(time / dt) + 1
@@ -193,10 +226,10 @@ if __name__ == '__main__':
                 eweno = EWENO(xc, eweno, dx, dt, problem, deriv, r)
                 t += dt
 
-            """plt.plot(x, analytic(x, t), color='red', label="Analytic")
+            plt.plot(x, analytic(x, t), color='red', label="Analytic")
             plt.plot(x, eweno[3:-3], color='purple', label='E-WENO')
             plt.legend()
-            plt.show()"""
+            plt.show()
 
             tempEWENO = abs(analytic(x, t) - eweno[r:-r])
 

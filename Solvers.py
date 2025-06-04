@@ -91,6 +91,7 @@ def solver(k, h, init, xbound, tbound, f, fprime, name):
 
             y[1:-1] = (tempL + tempR) / 2
 
+
         else:
             print("Please enter valid method name")
             return 0
