@@ -71,12 +71,12 @@ def DG(x, u0, u1, u2, dx, dt, problem, deriv):
             u0[-2 + i] = u0[1 + i]
             u1[-2 + i] = u1[1 + i]
             u2[-2 + i] = u2[1 + i]
-        #print(u0)
+
         n = len(u0)
         L0, L1, L2 = np.zeros(n), np.zeros(n), np.zeros(n)
 
-        utilde = 6*u1# + 30*u2
-        uttilde = 6*u1# - 30*u2
+        utilde = 6*u1 + 30*u2
+        uttilde = 6*u1 - 30*u2
 
         utilde_mod = utilde
         uttilde_mod = uttilde
@@ -110,9 +110,9 @@ def DG(x, u0, u1, u2, dx, dt, problem, deriv):
                 j = j - 1
 
             a0 = a[0] * u0[j]
-            a1 = a[1] * u1mod[j] * (val - x[j])
-            a2 = a[2] * u2[j] * ( np.power(val - x[j], 2) - 1/12 * np.power(dx, 2) )
-            return  a0 + a1# + a2
+            a1 = a[1] * u1[j] * (val - x[j])
+            a2 = a[2] * u2[j] * (np.power(val - x[j], 2) - 1/12 * np.power(dx, 2) )
+            return  a0 + a1 + a2
 
         for j in range(1, n-1):
             # Function Evals for GL approximation
@@ -137,17 +137,18 @@ def DG(x, u0, u1, u2, dx, dt, problem, deriv):
             L1[j] = -1/(2 * dx) * (hPlusHalf[j] + hPlusHalf[j-1]) + 1/dx * GLint1
 
             #d/dt u_j^(2)
-            GLint2 = (1/15*(hPlusHalf[j] + hPlusHalf[j-1]) +
+            GLint2 = (1/15 * hPlusHalf[j] * dx/2 +
+                      1/15 * hPlusHalf[j-1] * -dx/2 +
                       vals[0] * (dx / 2 * np.sqrt(1 / 3 + 2 * np.sqrt(7) / 21)) +
                       vals[1] * (-dx / 2 * np.sqrt(1 / 3 + 2 * np.sqrt(7) / 21)) +
                       vals[2] * (dx / 2 * np.sqrt(1 / 3 - 2 * np.sqrt(7) / 21)) +
                       vals[3] * (-dx / 2 * np.sqrt(1 / 3 - 2 * np.sqrt(7) / 21))
                       )
-            """GLint2 = 1/90 * (9*(hPlusHalf[j] + hPlusHalf[j-1]) +
+            """GLint2 = 1/90 * (9*(hPlusHalf[j] * dx/2 + hPlusHalf[j-1]*-dx/2) +
                                49*problem(U(dx/2 * np.sqrt(3/7) + x[j]) * (dx/2 * np.sqrt(3/7)) +
                                49*problem(U(-dx/2 * np.sqrt(3/7) + x[j])) * (-dx/2 * np.sqrt(3/7)))) #Gauss-Lobotto 5 point evaluation"""
 
-            L2[j] = -1/(6 * dx) *  (hPlusHalf[j] - hPlusHalf[j-1]) + 1/(np.power(dx, 2)) * GLint2
+            L2[j] = -1/(6 * dx) *  (hPlusHalf[j] - hPlusHalf[j-1]) + 1/(np.power(dx, 3)) * GLint2
 
         return L0, L1, L2
 
@@ -240,12 +241,12 @@ if __name__ == '__main__':
     problem = burgers_prime
     deriv = linear_deriv
 
-    dx = 1/20
-    dt = dx/2 #np.power(dx, 5/4)
+    dx = 1/40
+    dt = dx/3 #np.power(dx, 5/4)
 
     a = -1
     b = 1
-    time = 1
+    time = 2
 
     Nx = int((b-a) / dx) + 1
     Nt = int(time / dt) + 1
@@ -253,11 +254,11 @@ if __name__ == '__main__':
     x = np.linspace(a-dx, b+dx, Nx+2)
     t = np.linspace(0, time, Nt)
 
-    plot = 0
+    plot = 1
 
     if plot == 1:
         xx = np.linspace(-1, 1, 100)
-        DGSOL = np.zeros(len(xx))
+        DGSOL = init(x)
 
         plt.ion()
         figure = plt.figure()
@@ -265,7 +266,7 @@ if __name__ == '__main__':
 
         line0, = axis.plot(x[1:-1], init(x[1:-1]), 'red', label='Analytical Solution')
         lineDG, = axis.plot(x[1:-1], init(x[1:-1]), color='purple', label='DGRK Solution')
-        #lineSOL, = axis.plot(xx, init(xx), color='blue', label='DGRK Solution')
+        #lineSOL, = axis.plot(x[1:-1], init(x[1:-1]), color='blue', label='DGRK Solution')
 
 
         plt.ylim(-0.3, 0.8)
@@ -302,21 +303,21 @@ if __name__ == '__main__':
 
             a0 = a[0] * u0_[j]
             a1 = a[1] * u1_[j] * (val-x[j])
-            a2 = a[2] * u2_[j] * (np.power(val-x[j], 2) + np.power(dx, 2)/12)
-            return a0 + a1 #+ a2
+            a2 = a[2] * u2_[j] * (np.power(val - x[j], 2) - 1 / 12 * np.power(dx, 2))
+            return a0 + a1 + a2
 
         while t < time-dt/2:
             u0, u1, u2 = DG(x, u0, u1, u2, dx, dt, problem, deriv)
 
-            for j in range(len(xx)):
-                DGSOL[j] = U(xx[j], u0, u1, u2)
+            for j in range(0, len(x) - 1):
+                DGSOL[j] = U(x[j], u0, u1, u2)
 
             t += dt
             text.set_text("t = %f" % t)
 
             line0.set_ydata(analytic(x[1:-1], t ))
             lineDG.set_ydata(u0[1:-1])
-            #lineSOL.set_ydata(DGSOL)
+            #lineSOL.set_ydata(DGSOL[1:-1])
 
             figure.canvas.draw()
             figure.canvas.flush_events()
@@ -337,7 +338,7 @@ if __name__ == '__main__':
 
         for dx in hvals:
             hs = hs + 1
-            dt = dx / 2
+            dt = dx / 3
 
             Nx = Nvals[hs]
             Nt = int(time / dt) + 1
