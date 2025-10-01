@@ -46,7 +46,7 @@ def DG(x, u0, u1, u2, dx, dt, problem, deriv, order=3):
             return 1 / 2 * (problem(a) + problem(b) - beta * (b - a))
 
     def mm(arr, j): # modified minmod function
-        M2 = 0
+        M2 = np.pi**2
         M = 2/9 * (3 + 10 * M2) * M2 * (np.power(dx, 2) / (np.power(dx,2) + np.abs(u0[j+1] - u0[j]) + np.abs(u0[j] - u0[j-1])) )
         def m(arr): # minmod function
             if sum(arr < 0) == 0:
@@ -62,7 +62,7 @@ def DG(x, u0, u1, u2, dx, dt, problem, deriv, order=3):
             return m(arr)
 
     def L(u0, u1, u2):
-        left = 2
+        left = 0
         right = 0
         for i in range(2):  # left bound
             u0[i] = left #u0[-3 + i]
@@ -174,7 +174,7 @@ def DG(x, u0, u1, u2, dx, dt, problem, deriv, order=3):
 
     for i in range(2):
         for l in range(3):
-            uk[l, -1][i] = 2 #uk[l, -1][-3 + i]
+            uk[l, -1][i] = 0 #uk[l, -1][-3 + i]
 
     return uk[0, -1], uk[1, -1], uk[2, -1]
 
@@ -224,8 +224,8 @@ def analytical3(x, t):
 
 if __name__ == '__main__':
     def init(x):
-        #return 1/4+1/2*np.sin(np.pi * x)
-        return analytical3(x, 0)
+        #return -np.sin(np.pi * x)
+        return analytical2(x, 0)
 
     def analytic(x,t):
         #return init(x - t)
@@ -237,12 +237,12 @@ if __name__ == '__main__':
     problem = burgers
     deriv = burgers_prime
 
-    dx = 1/20
-    dt = dx/4 #np.power(dx, 5/4)
+    dx = 1/50
+    dt = dx/3 #np.power(dx, 5/4)
 
     a = -1
-    b = 4
-    time = 2
+    b = 1
+    time = 1
 
     Nx = int((b-a) / dx) + 1
     Nt = int(time / dt) + 1
@@ -258,12 +258,12 @@ if __name__ == '__main__':
         figure = plt.figure()
         axis = figure.add_subplot(111)
 
-        line0, = axis.plot(x[1:-1], init(x[1:-1]), 'red', label='Analytical Solution')
+        #line0, = axis.plot(x[1:-1], init(x[1:-1]), 'red', label='Analytical Solution')
         lineDG, = axis.plot(x[1:-1], init(x[1:-1]), color='purple', label='DGRK Solution')
         #lineSOL, = axis.plot(x[1:-1], init(x[1:-1]), color='blue', label='DGRK Func Solution')
 
 
-        plt.ylim(-0.3, 2.3)
+        plt.ylim(-1.2, 1.2)
         plt.legend()
         plt.xlabel("x")
         plt.ylabel("u(x,t)")
@@ -312,7 +312,7 @@ if __name__ == '__main__':
             t += dt
             text.set_text("t = %f" % t)
 
-            line0.set_ydata(analytic(x[1:-1], t ))
+            #line0.set_ydata(analytic(x[1:-1], t ))
             lineDG.set_ydata(u0[1:-1])
             #lineSOL.set_ydata(DGSOL[1:-1])
 
