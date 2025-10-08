@@ -71,6 +71,7 @@ if __name__ == '__main__':
     t = 0
     i=0
     while t < time-dt/2:
+        name = 'figure' + str(i) #Used to save plots
         for j in range(4):
             V = M[j] @ U[j]
             V += dt * (-1 / k[j] * V + (1 / k[j] + 1) * U[j] - np.power(U[j], 2))  # update V
@@ -90,6 +91,9 @@ if __name__ == '__main__':
         figure.canvas.draw()
         figure.canvas.flush_events()
         i+=1
+
+        #plt.savefig("C:/Users/tyler/Documents/Plots/" + name) # Used to save plots
+
 
 
     plt.ioff()

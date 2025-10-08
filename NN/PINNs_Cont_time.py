@@ -57,7 +57,7 @@ class DNN(torch.nn.Module):
 
 # The physics-guided nerual network
 class PhysicsInformedNN():
-    def __init__(self, X_init, u_init, X_f, layers, lb, ub, nu):
+    def __init__(self, X_init, u_init, X_f, layers, lb, ub, nu = 0.01/np.pi):
         # Boundary Conditions
         self.lb = torch.tensor(lb).float().to(device)
         self.ub = torch.tensor(ub).float().to(device)
@@ -73,32 +73,11 @@ class PhysicsInformedNN():
         self.layers = layers
         self.nu = nu
 
-        # settings
-        #self.lambda_1 = torch.tensor([0.0], requires_grad=True).to(device)
-        #self.lambda_2 = torch.tensor([-6.0], requires_grad=True).to(device)
-
-        #self.lambda_1 = torch.nn.Parameter(self.lambda_1)
-        #self.lambda_2 = torch.nn.Parameter(self.lambda_2)
-
         # Deep Neural Networks
         self.dnn = DNN(layers).to(device)
-        #self.dnn.register_parameter('lambda_1', self.lambda_1)
-        #self.dnn.register_parameter('lambda_2', self.lambda_2)
 
         # optimizer: using the same settings
-        self.optimizer = torch.optim.LBFGS(
-            self.dnn.parameters(),
-            lr=1.0,
-            max_iter=50000,
-            max_eval=50000,
-            history_size=50,
-            tolerance_grad=0.00001,
-            tolerance_change=1.0 * np.finfo(float).eps, #machine epsilon
-            line_search_fn="strong_wolfe"
-        )
-
-        #self.optimizer_Adam = torch.optim.Adam(self.dnn.parameters())
-        self.iter = 0
+        self.optimizer = torch.optim.Adam(self.dnn.parameters())
 
     def net_u(self, x, t):
         u = self.dnn(torch.cat([x, t], dim=1))
@@ -133,8 +112,6 @@ class PhysicsInformedNN():
         return f
 
     def loss_func(self):
-        self.optimizer.zero_grad()
-
         u_pred = self.net_u(self.x_init, self.t_init)
         f_pred = self.net_f(self.x_f, self.t_f)
 
@@ -143,24 +120,27 @@ class PhysicsInformedNN():
 
         loss = loss_u + loss_f
 
-        loss.backward()
-        self.iter += 1
-        if self.iter % 100 == 0:
-            print(
-                'Iter %d, Loss: %.5e, Loss_u: %.5e, Loss_f: %.5e' % (
-                    self.iter, loss.item(), loss_u.item(), loss_f.item()
-                )
-            )
-
         return loss
 
-    def train(self):
-        self.dnn.train()
-        print("Iter %d" % self.iter)
+    def train(self, epoch):
+        for epoch in range(nIter):
+            # Zero Gradients
+            self.optimizer.zero_grad()
 
-        # Backward and optimize
-        self.optimizer.step(self.loss_func)
-        print("Iter %d" % self.iter)
+            # Compute Loss and Gradients
+            loss = self.loss_func()
+            loss.backward()
+
+            # Adjust Learning Weights
+            self.optimizer.step()
+
+            if epoch % 100 == 0:
+                print(
+                    'Epoch %d, Loss: %.5e' % (
+                        epoch,
+                        loss.item()
+                    )
+                )
 
     def predict(self, X):
         x = torch.tensor(X[:, 0:1], requires_grad=True).float().to(device)
@@ -221,18 +201,21 @@ def analytical3(x, t):
 #------------------------------------------------------------
 
 def init(x):
-    return -np.sin(np.pi * x)
-    #return analytical2(x,0)
+    #return -np.sin(np.pi * x)
+    return analytical2(x,0)
 
+analytic_OffOn = 1
 def analytic_Sol(x,t):
-    return init(x - t)
+    return analytical2(x, t)
 
 
 nu = 0.01/np.pi
-Nx = 50
-Nt = 25
+Nx = 100
+Nt = 50
 N_f = 10000
-layers = [2, 20, 20, 20, 20, 20, 20, 20, 20, 1]
+epochs = 2000
+
+layers = [2, 20, 20, 20, 20, 20, 20, 1]
 
 lb = -1
 ub = 1
@@ -272,14 +255,17 @@ X_training = np.vstack((X_training, X_initial))
 # training
 start_time = time.time()
 
-model = PhysicsInformedNN(X_initial, u_initial, X_training, layers, lb, ub, nu=0.01/np.pi)
-model.train()
+model = PhysicsInformedNN(X_initial, u_initial, X_training, layers, lb, ub)
+model.train(epochs)
 
 end_time = time.time()
 elapsed_time = end_time - start_time
 print(f"Executation Time: {elapsed_time:.6f} seconds")
 
-x_pred = np.array([np.linspace(-1,1, 256)]).T
+
+#---------------------------------- PLOTTING -------------------------------------
+
+x_pred = np.array([np.linspace(-1,1, 100)]).T
 t_pred = np.array([np.linspace(0,1, 101)]).T
 X, T = np.meshgrid(x_pred,t_pred)
 
@@ -289,12 +275,17 @@ u_pred, f_pred = model.predict(X_pred)
 U_pred = griddata(X_pred, u_pred.flatten(), (X, T), method = 'cubic')
 
 
+####### HEAT MAP AND SLICES ##################
 """ The aesthetic setting has changed. """
-####### Row 0: u(t,x) ##################
+dx = x[1]-x[0]
 
-fig = plt.figure(figsize=(9, 5))
+fig = plt.figure(figsize=(14, 8))
 ax = fig.add_subplot(111)
+gs1 = gridspec.GridSpec(2, 4)
+gs1.update(top=0.9, bottom=0.1, left=0.1, right=0.9, wspace=0.5)
 
+# HEAT MAP
+ax = plt.subplot(gs1[0, :])
 h = ax.imshow(U_pred.T, interpolation='nearest', cmap='rainbow',
               extent=[t.min(), t.max(), x.min(), x.max()],
               origin='lower', aspect='auto')
@@ -329,72 +320,41 @@ ax.legend(
 ax.set_title('$u(t,x)$', fontsize = 20) # font size doubled
 ax.tick_params(labelsize=15)
 
-plt.show()
-
-####### Row 1: u(t,x) slices ##################
-plt.ion()
-figure = plt.figure()
-axis = figure.add_subplot(111)
-
-line0, = axis.plot(x_pred, init(x_pred), 'red', label='Analytical Solution')
-linePINN, = axis.plot(x_pred, init(x_pred), color='purple', label='PINN Solution')
-
-plt.ylim(plot_low, plot_high)
-plt.legend()
-plt.xlabel("x")
-plt.ylabel("u(x,t)")
-
-i = 0
-time = 1
-t = 0
-dt = t_pred[1]-t_pred[0]
-text = plt.text(0, 0, "t = 0")
-
-while t < time - dt/2:
-    line0.set_ydata(analytic_Sol(x_pred, t))
-    linePINN.set_ydata(U_pred[i, :])
-
-    figure.canvas.draw()
-    figure.canvas.flush_events()
-    t += dt
-    text.set_text("t = %f" % t)
-    i += 1
-
-plt.ioff()
-plt.show()
-
-
-""" The aesthetic setting has changed. """
-
-"""fig = plt.figure(figsize=(14, 10))
-ax = fig.add_subplot(111)
-
-gs1 = gridspec.GridSpec(1, 3)
-gs1.update(top=1-1.0/3.0-0.1, bottom=1.0-2.0/3.0, left=0.1, right=0.9, wspace=0.5)
-
-ax = plt.subplot(gs1[0, 0])
-#ax.plot(x,Exact[25,:], 'b-', linewidth = 2, label = 'Exact')
-ax.plot(x_pred,U_pred[25,:], 'r--', linewidth = 2, label = 'Prediction')
+# Slices
+ax = plt.subplot(gs1[1, 0])
+if analytic_OffOn:
+    ax.plot(x_pred, analytic_Sol(x_pred, t = 0.25), 'b-', linewidth = 2, label = 'Exact')
+    error = pow(dx * sum(pow((analytic_Sol(x_pred, t=0.25) - U_pred[25, :]), 2)), 1 / 2)
+    text = plt.text(-1, 0, f"Error = %.5f" % error)
+ax.plot(x_pred, U_pred[25,:], 'r--', linewidth = 2, label = 'Prediction')
 ax.set_xlabel('$x$')
 ax.set_ylabel('$u(t,x)$')
 ax.set_title('$t = 0.25$', fontsize = 15)
 ax.axis('square')
-ax.set_xlim([-1.1,1.1])
-ax.set_ylim([-1.1,1.1])
+ax.set_xlim([lb-0.1, ub+0.1])
+ax.set_ylim([plot_low, plot_high])
+
+
 
 for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] +
              ax.get_xticklabels() + ax.get_yticklabels()):
     item.set_fontsize(15)
 
-ax = plt.subplot(gs1[0, 1])
-#ax.plot(x,Exact[50,:], 'b-', linewidth = 2, label = 'Exact')
-ax.plot(x_pred,U_pred[50,:], 'r--', linewidth = 2, label = 'Prediction')
+ax = plt.subplot(gs1[1, 1])
+if analytic_OffOn:
+    ax.plot(x_pred, analytic_Sol(x_pred, t = 0.5), 'b-', linewidth = 2, label = 'Exact')
+    error = pow(dx * sum(pow((analytic_Sol(x_pred, t=0.5) - U_pred[50, :]), 2)), 1 / 2)
+    text = plt.text(-1, 0, f"Error = %.5f" % error)
+ax.plot(x_pred, U_pred[50,:], 'r--', linewidth = 2, label = 'Prediction')
 ax.set_xlabel('$x$')
 ax.set_ylabel('$u(t,x)$')
 ax.axis('square')
-ax.set_xlim([-1.1,1.1])
-ax.set_ylim([-1.1,1.1])
+ax.set_xlim([lb-0.1, ub+0.1])
+ax.set_ylim([plot_low, plot_high])
 ax.set_title('$t = 0.50$', fontsize = 15)
+
+
+
 ax.legend(
     loc='upper center',
     bbox_to_anchor=(0.5, -0.15),
@@ -407,21 +367,78 @@ for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] +
              ax.get_xticklabels() + ax.get_yticklabels()):
     item.set_fontsize(15)
 
-ax = plt.subplot(gs1[0, 2])
-#ax.plot(x,Exact[75,:], 'b-', linewidth = 2, label = 'Exact')
+ax = plt.subplot(gs1[1, 2])
+if analytic_OffOn:
+    ax.plot(x_pred, analytic_Sol(x_pred, t = 0.75), 'b-', linewidth = 2, label = 'Exact')
+    error = pow(dx * sum(pow((analytic_Sol(x_pred, t=0.75) - U_pred[75, :]), 2)), 1 / 2)
+    text = plt.text(-1, 0, f"Error = %.5f" % error)
 ax.plot(x_pred,U_pred[75,:], 'r--', linewidth = 2, label = 'Prediction')
 ax.set_xlabel('$x$')
 ax.set_ylabel('$u(t,x)$')
 ax.axis('square')
-ax.set_xlim([-1.1,1.1])
-ax.set_ylim([-1.1,1.1])
+ax.set_xlim([lb-0.1, ub+0.1])
+ax.set_ylim([plot_low, plot_high])
 ax.set_title('$t = 0.75$', fontsize = 15)
+
+
 
 for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] +
              ax.get_xticklabels() + ax.get_yticklabels()):
     item.set_fontsize(15)
 
-plt.show()"""
+ax = plt.subplot(gs1[1, 3])
+if analytic_OffOn:
+    ax.plot(x_pred, analytic_Sol(x_pred, t = 1), 'b-', linewidth = 2, label = 'Exact')
+    error = pow(dx * sum(pow((analytic_Sol(x_pred, t=1) - U_pred[100, :]), 2)), 1 / 2)
+    text = plt.text(-1, 0, f"Error = %.5f" % error)
+ax.plot(x_pred,U_pred[100,:], 'r--', linewidth = 2, label = 'Prediction')
+ax.set_xlabel('$x$')
+ax.set_ylabel('$u(t,x)$')
+ax.axis('square')
+ax.set_xlim([lb-0.1, ub+0.1])
+ax.set_ylim([plot_low, plot_high])
+ax.set_title('$t = 1.0$', fontsize = 15)
 
 
-#print('Error l2: %.5f%%' % (error_lambda_2_noisy))
+
+for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] +
+             ax.get_xticklabels() + ax.get_yticklabels()):
+    item.set_fontsize(15)
+
+plt.show()
+
+
+""" The aesthetic setting has changed. """
+####### Row 1: u(t,x) Animated ##################
+plt.ion()
+figure = plt.figure()
+axis = figure.add_subplot(111)
+
+if analytic_OffOn:
+    line0, = axis.plot(x_pred, init(x_pred), 'red', label='Analytical Solution')
+linePINN, = axis.plot(x_pred, init(x_pred), color='purple', label='PINN Solution')
+
+plt.ylim(plot_low, plot_high)
+plt.legend()
+plt.xlabel("x")
+plt.ylabel("u(x,t)")
+
+i = 0
+time = 1
+tt = 0
+dt = t_pred[1]-t_pred[0]
+text = plt.text(0, 0, "t = 0")
+
+while tt < time - dt/2:
+    if analytic_OffOn:
+        line0.set_ydata(analytic_Sol(x_pred, tt))
+    linePINN.set_ydata(U_pred[i, :])
+
+    figure.canvas.draw()
+    figure.canvas.flush_events()
+    tt += dt
+    text.set_text("t = %f" % tt)
+    i += 1
+
+plt.ioff()
+plt.show()
