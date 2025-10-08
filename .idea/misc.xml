@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="Black">
-    <option name="sdkName" value="Python 3.9 (Homework 2)" />
+    <option name="sdkName" value="Remote Python 3.13.7 Docker (python:latest)" />
   </component>
   <component name="ProjectRootManager" version="2" project-jdk-name="C:\Users\Tyler Skaggs\anaconda3" project-jdk-type="Python SDK" />
 </project>

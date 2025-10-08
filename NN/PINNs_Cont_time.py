@@ -1,7 +1,5 @@
 import sys
 
-from sqlalchemy.testing.exclusions import requires_tag
-
 sys.path.insert(0, '../Utilities/')
 
 import torch
@@ -14,7 +12,7 @@ from scipy.interpolate import griddata
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.gridspec as gridspec
 import warnings
-
+import time
 
 warnings.filterwarnings('ignore')
 np.random.seed(1324)
@@ -95,7 +93,7 @@ class PhysicsInformedNN():
             max_eval=50000,
             history_size=50,
             tolerance_grad=0.00001,
-            tolerance_change=1.0*np.finfo(float).eps, #machine epsilon
+            tolerance_change=1.0 * np.finfo(float).eps, #machine epsilon
             line_search_fn="strong_wolfe"
         )
 
@@ -162,6 +160,7 @@ class PhysicsInformedNN():
 
         # Backward and optimize
         self.optimizer.step(self.loss_func)
+        print("Iter %d" % self.iter)
 
     def predict(self, X):
         x = torch.tensor(X[:, 0:1], requires_grad=True).float().to(device)
@@ -175,6 +174,18 @@ class PhysicsInformedNN():
 
         return u, f
 
+def analytical1(x, t):
+    y = np.zeros(np.size(x))
+    ul = 0
+    ur = 1
+    for i in range(0, np.size(x)):
+        if x[i] <= ul * t:
+            y[i] = ul
+        elif x[i] > t * ur:
+            y[i] = ur
+        else:
+            y[i] = x[i] / t
+    return y
 
 def analytical2(x, t):
     y = np.zeros(np.size(x))
@@ -189,9 +200,32 @@ def analytical2(x, t):
             y[i] = ur
     return y
 
+def analytical3(x, t):
+    y = np.zeros(np.size(x))
+
+    for i in range(0, np.size(x)):
+        if t < 2:
+            if x[i] <= t * 3 / 2:
+                y[i] = 2
+            elif x[i] < 1/2 * t + 2:
+                y[i] = 1
+            else:
+                y[i] = 0
+        if t >= 2:
+            if x[i] <= t + 1:
+                y[i] = 2
+            else:
+                y[i] = 0
+    return y
+
+#------------------------------------------------------------
+
 def init(x):
     return -np.sin(np.pi * x)
+    #return analytical2(x,0)
 
+def analytic_Sol(x,t):
+    return init(x - t)
 
 
 nu = 0.01/np.pi
@@ -202,8 +236,11 @@ layers = [2, 20, 20, 20, 20, 20, 20, 20, 20, 1]
 
 lb = -1
 ub = 1
-lb_uval = 0
+lb_uval = 1
 ub_uval = 0
+
+plot_low = -0.2
+plot_high = 1.2
 
 # (x, t = 0)
 x = 2 * np.random.random_sample(Nx) - 1
@@ -233,8 +270,14 @@ t = X_training[:, 1]
 X_training = np.vstack((X_training, X_initial))
 
 # training
+start_time = time.time()
+
 model = PhysicsInformedNN(X_initial, u_initial, X_training, layers, lb, ub, nu=0.01/np.pi)
 model.train()
+
+end_time = time.time()
+elapsed_time = end_time - start_time
+print(f"Executation Time: {elapsed_time:.6f} seconds")
 
 x_pred = np.array([np.linspace(-1,1, 256)]).T
 t_pred = np.array([np.linspace(0,1, 101)]).T
@@ -293,10 +336,10 @@ plt.ion()
 figure = plt.figure()
 axis = figure.add_subplot(111)
 
-#line0, = axis.plot(x_pred, init(x_pred), 'red', label='Analytical Solution')
+line0, = axis.plot(x_pred, init(x_pred), 'red', label='Analytical Solution')
 linePINN, = axis.plot(x_pred, init(x_pred), color='purple', label='PINN Solution')
 
-plt.ylim(min(init(x_pred))[0]-0.2, max(init(x_pred))[0]+0.2)
+plt.ylim(plot_low, plot_high)
 plt.legend()
 plt.xlabel("x")
 plt.ylabel("u(x,t)")
@@ -308,7 +351,7 @@ dt = t_pred[1]-t_pred[0]
 text = plt.text(0, 0, "t = 0")
 
 while t < time - dt/2:
-    #line0.set_ydata(analytical2(x_pred, t))
+    line0.set_ydata(analytic_Sol(x_pred, t))
     linePINN.set_ydata(U_pred[i, :])
 
     figure.canvas.draw()
@@ -380,16 +423,5 @@ for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] +
 
 plt.show()"""
 
-# evaluations
-#u_pred, f_pred = model.predict(X_star)
 
-#lambda_1_value_noisy = model.lambda_1.detach().cpu().numpy()
-#lambda_2_value_noisy = model.lambda_2.detach().cpu().numpy()
-#lambda_2_value_noisy = np.exp(lambda_2_value_noisy)
-
-#error_lambda_1_noisy = np.abs(lambda_1_value_noisy - 1.0) * 100
-#error_lambda_2_noisy = np.abs(lambda_2_value_noisy - nu) / nu * 100
-
-#print('Error u: %e' % (error_u))
-#print('Error l1: %.5f%%' % (error_lambda_1_noisy))
 #print('Error l2: %.5f%%' % (error_lambda_2_noisy))
