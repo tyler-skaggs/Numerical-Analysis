@@ -60,13 +60,13 @@ def initial_condition3(x):
 
 if __name__ == '__main__':
     A = 1
-    h = 0.01
+    h = 0.0001
     k = h / 2
 
     tmin, tmax = 0.0, 1.0  # start and stop time of simulation
     xmin, xmax = 0, 2  # start and end of spatial domain
 
-    solvers = [lax_wendroff, lax_friedrichs, one_sided_left]
+    solvers = [lax_friedrichs]
 
     Nx = int((xmax - xmin) / h) + 1
     Nt = int((tmax - tmin) / k) + 1
@@ -140,6 +140,8 @@ if __name__ == '__main__':
                 line.set_data(x, analytical[i, :])
             else:
                 line.set_data(x, solutions[k, i, :])
+
+        i += 1000
         return lines,
 
 

@@ -224,25 +224,25 @@ def analytical3(x, t):
 
 if __name__ == '__main__':
     def init(x):
-        #return -np.sin(np.pi * x)
+        return np.sin(-np.pi * x)
         return analytical2(x, 0)
 
     def analytic(x,t):
         #return init(x - t)
         return analytical3(x,t)
 
-    order = 3
+    order = 2
     plot = 1
 
     problem = burgers
     deriv = burgers_prime
 
-    dx = 1/50
+    dx = 1/10000
     dt = dx/3 #np.power(dx, 5/4)
 
     a = -1
     b = 1
-    time = 1
+    time = 2/np.pi
 
     Nx = int((b-a) / dx) + 1
     Nt = int(time / dt) + 1

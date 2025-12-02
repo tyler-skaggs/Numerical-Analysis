@@ -217,10 +217,10 @@ def analytic_Sol(x,t):
 
 
 nu = 0.01/np.pi
-Nx = 100
-Nt = 50
-N_f = 10000
-epochs = 20000
+Nx = 320
+Nt = 160
+N_f = 2540
+epochs = 3000
 
 layers_u = [2, 128, 128, 128, 128, 1]
 layers_v = [2, 64, 64, 64, 64, 1]
@@ -234,7 +234,7 @@ plot_low = -0.2
 plot_high = 1.2
 
 # (x, t = 0)
-x = 2 * np.random.random_sample(Nx) - 1
+x = (ub - lb) * np.random.random_sample(Nx) - (ub-lb)/2
 init_x = np.vstack((x,np.zeros(len(x)))).T
 u_init = init(x)
 
@@ -252,9 +252,9 @@ u_ub = ub_uval * np.ones(Nt)
 X_initial = np.vstack((init_x, init_lb, init_ub))
 u_initial = np.array([np.hstack((u_init, u_lb, u_ub))]).T
 
-# Random 10000 data to train on
+# Random N_f data to train on
 X_training = np.random.random_sample((N_f, 2))
-X_training[:, 0] = 2 * X_training[:, 0] - 1
+X_training[:, 0] = (ub-lb) * X_training[:, 0] - (ub - lb)/2
 x = X_training[:, 0]
 t = X_training[:, 1]
 
@@ -285,7 +285,7 @@ U_pred = griddata(X_pred, u_pred.flatten(), (X, T), method = 'cubic')
 
 ####### HEAT MAP AND SLICES ##################
 """ The aesthetic setting has changed. """
-dx = x[1]-x[0]
+dx = x_pred[1]-x_pred[0]
 
 fig = plt.figure(figsize=(14, 8))
 ax = fig.add_subplot(111)

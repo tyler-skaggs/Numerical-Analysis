@@ -1,24 +1,43 @@
+import matplotlib.pyplot as plt
 import numpy as np
-import scipy.io
 
-def init(x):
-    return -np.sin(np.pi * x)
+from matplotlib import cm
+from matplotlib.ticker import LinearLocator
 
-data = scipy.io.loadmat('./burgers_shock.mat')
-t = data['t'].flatten()[:,None]
-x = data['x'].flatten()[:,None]
-Exact = np.real(data['usol']).T
+# Make data.
+X = np.arange(-5, 5, 0.25)
+Y = np.arange(-5, 5, 0.25)
+X, Y = np.meshgrid(X, Y)
+R = np.sqrt(X**2 + Y**2)
+Z = np.sin(R)
 
-X, T = np.meshgrid(x,t)
+# Plot the surface.
+fig = plt.figure(figsize=plt.figaspect(0.5))
+ax = fig.add_subplot(1, 2, 1, projection='3d')
 
-X_star = np.hstack((X.flatten()[:,None], T.flatten()[:,None]))
-u_star = Exact.flatten()[:,None]
+# plot a 3D surface like in the example mplot3d/surface3d_demo
+T = -1
+surf = ax.plot_surface(X,Y,Z, rstride=1, cstride=1, cmap=cm.coolwarm, linewidth=0, antialiased=False)
+ax.set_xlabel(r"$y$")
+ax.set_ylabel(r"$x$")
+ax.set_zlabel(r"$u(x,t)$")
+ax.set_title(r"PINN approximation")
 
-x_pred = np.array([np.linspace(-1,1, 256)]).T
-t_pred = np.array([np.linspace(0,0.99, 100)]).T
-X, T = np.meshgrid(x_pred,t_pred)
+# ==============
+# Second subplot
+# ==============
+# set up the Axes for the second plot
+ax = fig.add_subplot(1, 2, 2, projection='3d')
+
+# plot a 3D wireframe like in the example mplot3d/wire3d_demo
 
 
-X_pred = np.hstack((X.flatten()[:, None], T.flatten()[:, None]))
+surf = ax.plot_surface(X, Y, Z, rstride=1, cstride=1, cmap=cm.coolwarm,
+                       linewidth=0, antialiased=False)
+ax.set_xlabel(r"$y$")
+ax.set_ylabel(r"$x$")
+ax.set_zlabel(r"$u(x,t)$")
+ax.set_title(r"Exact Solution*")
+plt.show()
 
-print(min(init(x_pred))[0])
+plt.show()

@@ -158,12 +158,12 @@ if __name__ == '__main__':
     #init = initial_sin
     problem = linear#burgers
     deriv = linear_prime#burgers_prime
-    plot = 0
+    plot = 1
 
-    h = 0.005
+    h = 0.00000000000000001
     k = h / 3
-    xbounds = (0, 1)
-    tbounds = (0, 0.5)
+    xbounds = (0.5 - h*100000, 0.5+h*100000)
+    tbounds = (0, h*10)
     Nx = int((xbounds[1] - xbounds[0]) / h) + 1
     Nt = int((tbounds[1] - tbounds[0]) / k) + 1
     x = np.linspace(xbounds[0], xbounds[1], Nx)  # discretization of space
@@ -187,7 +187,7 @@ if __name__ == '__main__':
         #line3, = axis.plot(x, solM[:, 0], 'orange', label='MacCormack')
         #line4, = axis.plot(x, solU[:, 0], 'yellow', label='Upwind')
         #line5, = axis.plot(x, solG[:, 0], 'cyan', label='Gudunov')
-        line6, = axis.plot(x, solLW[:, 0], 'green', label='Lax-Wendroff')
+        #line6, = axis.plot(x, solLW[:, 0], 'green', label='Lax-Wendroff')
 
         plt.legend()
         plt.xlabel("x")
@@ -213,7 +213,7 @@ if __name__ == '__main__':
             #line3.set_ydata(solM[:, i])
             #line4.set_ydata(solU[:, i])
             #line5.set_ydata(solG[:, i])
-            line6.set_ydata(solLW[:, i])
+            #line6.set_ydata(solLW[:, i])
             figure.canvas.draw()
             figure.canvas.flush_events()
 

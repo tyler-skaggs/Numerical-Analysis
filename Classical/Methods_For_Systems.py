@@ -42,8 +42,8 @@ def initial_condition1(x):
 
 def initial_condition2(x):
     f = np.zeros_like(x)
-    x_left = 2.75
-    x_right = 3.25
+    x_left = 1
+    x_right = 3
     xm = (x_right - x_left) / 2.0
     f = where((x > x_left) & (x < x_right), np.sin(np.pi * (x - x_left) / (x_right - x_left)) ** 4, f)
     return f
@@ -63,12 +63,12 @@ def analytical2(x, t, init):
 
 if __name__ == '__main__':
     system = 1
-    init = initial_condition1
+    init = initial_condition2
 
     h = 0.01
-    k = h/3
+    k = h/2
     xbounds = (0, 4)
-    tbounds = (0, 0.1)
+    tbounds = (0, 0.5)
     Nx = int((xbounds[1] - xbounds[0]) / h) + 1
     Nt = int((tbounds[1] - tbounds[0]) / k) + 1
     x = np.linspace(xbounds[0], xbounds[1], Nx)  # discretization of space
@@ -84,17 +84,17 @@ if __name__ == '__main__':
     A2p = Q @ np.matrix([[2, 0], [0, 0]]) @ Qinv
     A2n = Q @ np.matrix([[0, 0], [0, -2]]) @ Qinv
 
-    solA, solB = numerical_solver(A2, A2p, A2n, init, h, k, xbounds, tbounds, "LW")
+    solA, solB = numerical_solver(A2, A2p, A2n, init, h, k, xbounds, tbounds, "LF")
 
     AnaA, AnaB = analytical1(x, 0, init)
 
-    """
+
     ### PLOTTING Solutions
     plt.ion()
     figure, axis = plt.subplots(2)
 
-    #line0, = axis[0].plot(x, AnaA, color='red', label='Analytical Solution')
-    #line1, = axis[1].plot(x, AnaB, color='red', label='Analytical Solution')
+    line0, = axis[0].plot(x, AnaA, color='red', label='Analytical Solution')
+    line1, = axis[1].plot(x, AnaB, color='red', label='Analytical Solution')
 
     line2, = axis[0].plot(x, solA[:, 0], color='blue', label="Numerical Solution")  # Returns a tuple of line objects, thus the comma
     axis[0].title.set_text('Equation A')
@@ -105,15 +105,15 @@ if __name__ == '__main__':
     plt.legend()
 
     for i in range(0, Nt):
-        #line0.set_ydata(analytical2(x, t[i], init)[0])
-        #line1.set_ydata(analytical2(x, t[i], init)[1])
+        line0.set_ydata(analytical2(x, t[i], init)[0])
+        line1.set_ydata(analytical2(x, t[i], init)[1])
         line2.set_ydata(solA[:, i])
         line3.set_ydata(solB[:, i])
 
         figure.canvas.draw()
         figure.canvas.flush_events()
 
-    """
+    plt.show()
 
     ## Calculating and Plotting Error
     hvals = (.1, 0.1/2, 0.1/4, 0.1/8, 0.1/16, 0.1/32, 0.1/64, 0.1/128, 0.1/256)#, 0.1/512)
