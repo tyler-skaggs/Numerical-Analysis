@@ -62,8 +62,8 @@ def analytical2(x, t, init):
 
 
 if __name__ == '__main__':
-    system = 1
-    init = initial_condition2
+    system = 2
+    init = initial_condition1
 
     h = 0.01
     k = h/2
