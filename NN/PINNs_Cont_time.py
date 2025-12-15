@@ -8,9 +8,6 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
-import scipy.io
-from scipy.stats import qmc
-import scipy.integrate as integrate
 from scipy.interpolate import griddata
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import warnings
@@ -138,7 +135,7 @@ class PhysicsInformedNN():
             create_graph=True
         )[0]
 
-        f = u_t + fun_x - epsilon * u_xx - epsilon**2 * self.tau * u_xxt
+        f = u_t + u_x #u_t + fun_x - epsilon * u_xx - epsilon**2 * self.tau * u_xxt
         return f
 
     def loss_func(self):
@@ -151,7 +148,6 @@ class PhysicsInformedNN():
 
         loss_BC = torch.nn.MSELoss()(u_BC_pred, self.u_BC)
         loss_IC = torch.nn.MSELoss()(u_IC_pred, self.u_IC)
-
         loss_PDE = torch.mean(f_pred ** 2)
 
         loss = omega[0]*loss_PDE + omega[1] * loss_IC + omega[2] * loss_BC
@@ -234,14 +230,15 @@ def init(x):
     temp = x.copy()
     for i in range(len(x)):
         if x[i] < 0:
-            temp[i] = 0.52
+            temp[i] = 1
         else:
             temp[i] = 0
     return temp
 
 
 def analytic_Sol(x,t):
-    return 6*np.sin(np.pi * x) * np.exp(- np.pi ** 2 * t) #x * np.cos(t)
+    return init(x - t)
+    #return 6*np.sin(np.pi * x) * np.exp(- np.pi ** 2 * t) #x * np.cos(t)
 
 
 class Cauchy_Activation(torch.nn.Module):
@@ -258,13 +255,13 @@ class Cauchy_Activation(torch.nn.Module):
 if __name__ == "__main__":
 
     tau = 5
-    ub_val = 0.52
+    ub_val = 1
 
-    lb = -1 #x bounds
-    ub = 1
+    lb = -0.5 #x bounds
+    ub = 1.5
 
-    plot_high = 1
-    plot_low = -1
+    plot_high = 1.5
+    plot_low = -0.5
 
     T = 1
 
@@ -274,9 +271,10 @@ if __name__ == "__main__":
     Nt = 100
     N_f = 250
 
-    analytic_OffOn = 0
+    analytic_OffOn = 1
 
-    layers = [2, 100, 100, 100, 100, 1]
+    layers = [2, 20, 20, 20, 20, 20, 20, 20, 20, 1]
+    #layers = [2, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 1]
 
     # (x, t = 0)
     x = (ub - lb) * np.random.random_sample(Nx) + lb
@@ -307,6 +305,10 @@ if __name__ == "__main__":
     model = PhysicsInformedNN(X_IC, X_BC, X_training, layers, lb, ub, tau, Cauchy_Activation)
 
     loss_history = model.train(epochs)
+
+    print(model.dnn.activation.lambda1.item())
+    print(model.dnn.activation.lambda2.item())
+    print(model.dnn.activation.d.item())
 
     end_time = time.time()
     elapsed_time = end_time - start_time
@@ -393,7 +395,7 @@ if __name__ == "__main__":
         text = plt.text(-1, -0.9, f"Error = %.5f" % error)
     ax.plot(x_pred, U_pred[25, :], 'r--', linewidth=2, label='Prediction')
     ax.set_xlabel('$x$')
-    ax.set_ylabel('$u(t,x)$')
+    ax.set_ylabel('$v(t,x)$')
     ax.set_title('$t = 0.25$', fontsize=15)
     ax.axis('square')
     ax.set_xlim([lb - 0.1, ub + 0.1])
@@ -410,7 +412,7 @@ if __name__ == "__main__":
         text = plt.text(-1, -0.9, f"Error = %.5f" % error)
     ax.plot(x_pred, U_pred[50, :], 'r--', linewidth=2, label='Prediction')
     ax.set_xlabel('$x$')
-    ax.set_ylabel('$u(t,x)$')
+    ax.set_ylabel('$v(t,x)$')
     ax.axis('square')
     ax.set_xlim([lb - 0.1, ub + 0.1])
     ax.set_ylim([plot_low, plot_high])
@@ -435,7 +437,7 @@ if __name__ == "__main__":
         text = plt.text(-1, -0.9, f"Error = %.5f" % error)
     ax.plot(x_pred, U_pred[75, :], 'r--', linewidth=2, label='Prediction')
     ax.set_xlabel('$x$')
-    ax.set_ylabel('$u(t,x)$')
+    ax.set_ylabel('$v(t,x)$')
     ax.axis('square')
     ax.set_xlim([lb - 0.1, ub + 0.1])
     ax.set_ylim([plot_low, plot_high])
@@ -452,7 +454,7 @@ if __name__ == "__main__":
         text = plt.text(-1, -0.9, f"Error = %.5f" % error)
     ax.plot(x_pred, U_pred[100, :], 'r--', linewidth=2, label='Prediction')
     ax.set_xlabel('$x$')
-    ax.set_ylabel('$u(t,x)$')
+    ax.set_ylabel('$v(t,x)$')
     ax.axis('square')
     ax.set_xlim([lb - 0.1, ub + 0.1])
     ax.set_ylim([plot_low, plot_high])
