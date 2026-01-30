@@ -1,4 +1,5 @@
 import sys
+
 sys.path.insert(0, '../Utilities/')
 
 import torch
@@ -8,6 +9,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
+from numpy import where
 from scipy.interpolate import griddata
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import warnings
@@ -55,12 +57,8 @@ class DNN(torch.nn.Module):
 
 # The physics-guided nerual network
 class PhysicsInformedNN():
-    def __init__(self, X_IC_init, X_BC_init,  X_f, layers, lb, ub, tau, custom_activ = torch.nn.Tanh):
-        # Boundary Conditions
-        self.lb = torch.tensor(lb).float().to(device)
-        self.ub = torch.tensor(ub).float().to(device)
-
-        self.tau = tau
+    def __init__(self, X_IC_init, X_BC_init,  X_f, layers_u, layers_v, F, custom_activ = torch.nn.Tanh):
+        self.F = F
 
         # data
         self.x_f = torch.tensor(X_f[:, 0:1], requires_grad=True).float().to(device)
@@ -74,38 +72,30 @@ class PhysicsInformedNN():
 
         self.u_IC = torch.tensor(X_IC_init[:, 2:3]).float().to(device)
         self.u_BC = torch.tensor(X_BC_init[:, 2:3]).float().to(device)
-        self.layers = layers
+
+        self.v_IC = torch.tensor(X_IC_init[:, 3:4]).float().to(device)
+        self.v_BC = torch.tensor(X_BC_init[:, 3:4]).float().to(device)
 
         # Deep Neural Networks
-        self.dnn = DNN(layers, custom_activ).to(device)
+        self.dnn_u = DNN(layers_u, custom_activ).to(device)
+        self.dnn_v = DNN(layers_v, custom_activ).to(device)
 
         # optimizer: using the same settings
-        self.optimizer = torch.optim.Adam(self.dnn.parameters())
+        self.optimizer = torch.optim.Adam(list(self.dnn_u.parameters()) + list(self.dnn_v.parameters()))
 
     def net_u(self, x, t):
-        u = self.dnn(torch.cat([x, t], dim=1))
+        u = self.dnn_u(torch.cat([x, t], dim=1))
         return u
 
-    def net_u_t(self, x, t):
-        u = self.net_u(x, t)
-        u_t = torch.autograd.grad(u, t, grad_outputs=torch.ones_like(u))[0]
-        return u_t
+    def net_v(self, x, t):
+        v = self.dnn_v(torch.cat([x, t], dim=1))
+        return v
+
 
     def net_f(self, x, t):
         """ The pytorch autograd for calculating residual """
         u = self.net_u(x, t)
-
-        M = 2
-        epsilon = 0.001
-
-        fun = u**2 / 2 #(u**2 + M * (1 - u) ** 2)
-
-        fun_x = torch.autograd.grad(
-            fun, x,
-            grad_outputs=torch.ones_like(u),
-            retain_graph=True,
-            create_graph=True
-        )[0]
+        v = self.net_v(x, t)
 
         u_t = torch.autograd.grad(
             u, t,
@@ -114,45 +104,37 @@ class PhysicsInformedNN():
             create_graph=True
         )[0]
 
-        u_x = torch.autograd.grad(
-            u, x,
-            grad_outputs=torch.ones_like(u),
+
+        v_x = torch.autograd.grad(
+            v, x,
+            grad_outputs=torch.ones_like(v),
             retain_graph=True,
             create_graph=True
         )[0]
 
-        u_xx = torch.autograd.grad(
-            u_x, x,
-            grad_outputs=torch.ones_like(u_x),
-            retain_graph=True,
-            create_graph=True
-        )[0]
-
-        u_xxt = torch.autograd.grad(
-            u_xx, t,
-            grad_outputs=torch.ones_like(u_x),
-            retain_graph=True,
-            create_graph=True
-        )[0]
-
-        f = u_t + fun_x #u_t + fun_x - epsilon * u_xx - epsilon**2 * self.tau * u_xxt
-        return f
+        return u_t + v_x
 
     def loss_func(self):
-        omega = np.array([1, 5, 5])
+        omega = np.array([0.1, 2, 10])
         omega = omega/sum(omega)
+
+        u = self.net_u(self.x_f, self.t_f)
+        v = self.net_v(self.x_f, self.t_f)
+
+        residual = self.net_f(self.x_f, self.t_f)
 
         u_BC_pred = self.net_u(self.x_BC, self.t_BC)
         u_IC_pred = self.net_u(self.x_IC, self.t_IC)
-        f_pred = self.net_f(self.x_f, self.t_f)
 
-        loss_BC = torch.nn.MSELoss()(u_BC_pred, self.u_BC)
-        loss_IC = torch.nn.MSELoss()(u_IC_pred, self.u_IC)
-        loss_PDE = torch.mean(f_pred ** 2)
+        loss_IC = torch.nn.MSELoss()(u_IC_pred, self.u_IC) + torch.nn.MSELoss()(u_BC_pred, self.u_BC)
 
-        loss = omega[0]*loss_PDE + omega[1] * loss_IC + omega[2] * loss_BC
+        loss_residual = torch.mean(residual ** 2)
 
-        return loss, loss_PDE, loss_IC, loss_BC
+        loss_flux = torch.nn.MSELoss()(v, self.F(u))
+
+        loss = omega[0]*loss_residual + omega[1] * loss_flux + omega[2] * loss_IC
+
+        return loss, loss_residual, loss_flux,  loss_IC
 
     def train(self, epochs):
         loss_hist = np.array([0,0,0,0])
@@ -161,7 +143,7 @@ class PhysicsInformedNN():
             self.optimizer.zero_grad()
 
             # Compute Loss and Gradients
-            loss, loss_PDE, loss_IC, loss_BC = self.loss_func()
+            loss, loss_residual, loss_flux, loss_IC = self.loss_func()
             loss.backward()
 
             # Adjust Learning Weights
@@ -169,19 +151,19 @@ class PhysicsInformedNN():
 
             if epoch % 100 == 0:
                 print(
-                    'Epoch %d | Loss: %.5e, L_PDE: %.5e, L_IC: %.5e, L_BC: %.5e' % (
+                    'Epoch %d | Loss: %.5e, L_Residual: %.5e, L_flux: %.5e, L_IC: %.5e' % (
                         epoch,
                         loss.item(),
-                        loss_PDE.item(),
-                        loss_IC.item(),
-                        loss_BC.item()
+                        loss_residual.item(),
+                        loss_flux.item(),
+                        loss_IC.item()
                     )
                 )
             loss_hist = np.vstack((loss_hist, np.array(([
                 loss.detach().cpu().numpy(),
-                loss_PDE.detach().cpu().numpy(),
-                loss_IC.detach().cpu().numpy(),
-                loss_BC.detach().cpu().numpy()
+                loss_residual.detach().cpu().numpy(),
+                loss_flux.detach().cpu().numpy(),
+                loss_IC.detach().cpu().numpy()
             ]))))
 
         return np.delete(loss_hist, (0), axis=0)
@@ -190,13 +172,12 @@ class PhysicsInformedNN():
         x = torch.tensor(X[:, 0:1], requires_grad=True).float().to(device)
         t = torch.tensor(X[:, 1:2], requires_grad=True).float().to(device)
 
-        self.dnn.eval()
+        self.dnn_u.eval()
         u = self.net_u(x, t)
-        f = self.net_f(x, t)
-        u = u.detach().cpu().numpy()
-        f = f.detach().cpu().numpy()
 
-        return u, f
+        u = u.detach().cpu().numpy()
+
+        return u
 
 
 
@@ -227,11 +208,6 @@ def analytical2(x, t):
     return y
 
 
-def analytic_Sol(x,t):
-    return analytical1(x,t)
-    #return 6*np.sin(np.pi * x) * np.exp(- np.pi ** 2 * t) #x * np.cos(t)
-
-
 class Cauchy_Activation(torch.nn.Module):
     def __init__(self):
         super().__init__()
@@ -245,71 +221,73 @@ class Cauchy_Activation(torch.nn.Module):
 
 if __name__ == "__main__":
 
-    init = lambda x: analytic_Sol(x, 0)
+    analytic_Sol = analytical1
+    init = lambda x: -np.sin(np.pi * x) #analytic_Sol(x, 0)
 
-    tau = 5
-    lb_val = 0
-    ub_val = 1
+    F = lambda u: (u ** 2) / 2
 
-    lb = -0.5 #x bounds
-    ub = 1.5
+    lb = -1 #x bounds
+    ub = 1
 
-    plot_high = 1.5
-    plot_low = -0.5
+    u_lb_val = 0
+    u_ub_val = 0
+    v_lb_val = F(u_lb_val)
+    v_ub_val = F(u_ub_val)
 
-    T = 1
+    plot_high = 1.25
+    plot_low = -1.25
 
-    epochs = 20000
+    TIME = 1
+
+    epochs = 1
 
     Nx = 320
     Nt = 80
     N_f = 2540
 
-    analytic_OffOn = 1
+    analytic_OffOn = 0
 
-    #layers = [2, 320, 1]
-    #layers = [2, 160, 160, 1]
-    layers = [2, 80, 80, 80, 80, 1]
-    #layers = [2, 40, 40, 40, 40, 40, 40, 40, 40, 1]
-    #layers = [2, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 1]
-    #layers = [2, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 1]
+    layers_u = [2, 128, 128, 128, 128, 1]
+    layers_v = [2, 64, 64, 64, 64, 1]
 
     # (x, t = 0)
     x = (ub - lb) * np.random.random_sample(Nx) + lb
-    X_IC = np.vstack((x, np.zeros(len(x)), init(x))).T
+
+    X_IC = np.vstack((x, np.zeros(len(x)), init(x), F(init(x)))).T
 
     # Lower x Bound
-    t = np.random.random_sample(Nt) * T
-    u_lb = lb_val * np.ones(len(t))
-    init_lb = np.vstack((lb * np.ones(Nt), t, u_lb)).T
+    t = np.random.random_sample(Nt) * TIME
+    u_lb = u_lb_val * np.ones(len(t))
+    v_lb = F(u_lb)
+    init_lb = np.vstack((lb * np.ones(Nt), t, u_lb, v_lb)).T
 
     # Upper x Bound
-    t = np.random.random_sample(Nt) * T
-    u_ub = ub_val * np.ones(len(t))
-    init_ub = np.vstack((ub * np.ones(Nt), t, u_ub)).T
+    t = np.random.random_sample(Nt) * TIME
+    u_ub = u_ub_val * np.ones(len(t))
+    v_ub = F(u_ub)
+    init_ub = np.vstack((ub * np.ones(Nt), t, u_ub, v_ub)).T
 
     X_BC = np.vstack((init_lb, init_ub))
+
 
     # Random N_f data to train on
     X_training = np.random.random_sample((N_f, 2))
     X_training[:, 0] = (ub - lb) * X_training[:, 0] + lb
-    X_training[:, 1] = X_training[:, 1] * T
+    X_training[:, 1] = X_training[:, 1] * TIME
     x = X_training[:, 0]
     t = X_training[:, 1]
+
     X_training = np.vstack((X_training, X_IC[:, 0:2], X_BC[:, 0:2]))
 
     start_time = time.time()
 
-    activation = torch.nn.Tanh
-
-    model = PhysicsInformedNN(X_IC, X_BC, X_training, layers, lb, ub, tau, activation)
+    model = PhysicsInformedNN(X_IC, X_BC, X_training, layers_u, layers_v, F, Cauchy_Activation) #torch.nn.Tanh)
 
     loss_history = model.train(epochs)
 
-    if activation == Cauchy_Activation:
-        print(model.dnn.activation.lambda1.item())
-        print(model.dnn.activation.lambda2.item())
-        print(model.dnn.activation.d.item())
+    print(model.dnn_u.activation.lambda1.item())
+    print(model.dnn_u.activation.lambda2.item())
+    print(model.dnn_u.activation.d.item())
 
     end_time = time.time()
     elapsed_time = end_time - start_time
@@ -317,23 +295,19 @@ if __name__ == "__main__":
 
     # Predictions
     x_pred = np.array([np.linspace(lb, ub, 101)]).T
-    t_pred = np.array([np.linspace(0, T, 101)]).T
+    t_pred = np.array([np.linspace(0, TIME, 101)]).T
     X, T = np.meshgrid(x_pred, t_pred)
 
     X_pred = np.hstack((X.flatten()[:, None], T.flatten()[:, None]))
 
-    u_pred, f_pred = model.predict(X_pred)
+    u_pred = model.predict(X_pred)
     U_pred = griddata(X_pred, u_pred.flatten(), (X, T), method='cubic')
 
-    # -------------------------------------------------
-    # ------------------ PLOTTING ---------------------
-    # -------------------------------------------------
-
     # Loss Graph
-    plt.plot(range(1001, epochs + 1), loss_history[1000:, 0], color='red', label=r"$L(\theta)$")
-    plt.plot(range(1001, epochs + 1), loss_history[1000:, 1], color='blue', label=r"$\mathcal{L}_{PDE}$")
-    plt.plot(range(1001, epochs + 1), loss_history[1000:, 2], color='orange', label=r"$\mathcal{L}_{IC}$")
-    plt.plot(range(1001, epochs + 1), loss_history[1000:, 3], color='green', label=r"$\mathcal{L}_{BC}$")
+    plt.plot(range(1, epochs + 1), loss_history[:, 0], color='red', label=r"$L(\theta)$")
+    #plt.plot(range(1001, epochs + 1), loss_history[1000:, 1], color='blue', label=r"$\mathcal{L}_{Residual}$")
+    #plt.plot(range(1001, epochs + 1), loss_history[1000:, 2], color='orange', label=r"$\mathcal{L}_{Flux}$")
+    #plt.plot(range(1001, epochs + 1), loss_history[1000:, 3], color='green', label=r"$\mathcal{L}_{IC + BC}$")
     plt.ylabel(r"$\mathcal{L}$")
     plt.xlabel("Epoch")
     plt.legend()
@@ -392,7 +366,7 @@ if __name__ == "__main__":
     ax = plt.subplot(gs1[1, 0])
     if analytic_OffOn:
         ax.plot(x_pred, analytic_Sol(x_pred, t=.25), 'b-', linewidth=2, label='Exact')
-        error = np.linalg.norm(analytic_Sol(x_pred, t=.25) - U_pred[25, :], 2) * np.sqrt(dx)
+        error = np.linalg.norm(analytical2(x_pred, t=.25) - U_pred[25, :], 2) * np.sqrt(dx)
         text = plt.text(-1, -0.9, f"Error = %.5f" % error)
     ax.plot(x_pred, U_pred[25, :], 'r--', linewidth=2, label='Prediction')
     ax.set_xlabel('$x$')
@@ -409,7 +383,7 @@ if __name__ == "__main__":
     ax = plt.subplot(gs1[1, 1])
     if analytic_OffOn:
         ax.plot(x_pred, analytic_Sol(x_pred, t=.5), 'b-', linewidth=2, label='Exact')
-        error = np.linalg.norm(analytic_Sol(x_pred, t=.5) - U_pred[50, :], 2)* np.sqrt(dx)
+        error = np.linalg.norm(analytic_Sol(x_pred, t=.5) - U_pred[50, :], 2) * np.sqrt(dx)
         text = plt.text(-1, -0.9, f"Error = %.5f" % error)
     ax.plot(x_pred, U_pred[50, :], 'r--', linewidth=2, label='Prediction')
     ax.set_xlabel('$x$')
@@ -434,7 +408,7 @@ if __name__ == "__main__":
     ax = plt.subplot(gs1[1, 2])
     if analytic_OffOn:
         ax.plot(x_pred, analytic_Sol(x_pred, t=.75), 'b-', linewidth=2, label='Exact')
-        error = np.linalg.norm(analytic_Sol(x_pred, t=.75) - U_pred[75, :], 2)* np.sqrt(dx)
+        error = np.linalg.norm(analytic_Sol(x_pred, t=.75) - U_pred[75, :], 2) * np.sqrt(dx)
         text = plt.text(-1, -0.9, f"Error = %.5f" % error)
     ax.plot(x_pred, U_pred[75, :], 'r--', linewidth=2, label='Prediction')
     ax.set_xlabel('$x$')
@@ -451,7 +425,7 @@ if __name__ == "__main__":
     ax = plt.subplot(gs1[1, 3])
     if analytic_OffOn:
         ax.plot(x_pred, analytic_Sol(x_pred, t=1), 'b-', linewidth=2, label='Exact')
-        error = np.linalg.norm(analytic_Sol(x_pred, t=1) - U_pred[100, :], 2)* np.sqrt(dx)
+        error = np.linalg.norm(analytic_Sol(x_pred, t=1) - U_pred[100, :], 2) * np.sqrt(dx)
         text = plt.text(-1, -0.9, f"Error = %.5f" % error)
     ax.plot(x_pred, U_pred[100, :], 'r--', linewidth=2, label='Prediction')
     ax.set_xlabel('$x$')

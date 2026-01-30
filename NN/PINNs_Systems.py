@@ -1,5 +1,4 @@
 import sys
-from itertools import chain
 
 sys.path.insert(0, '../Utilities/')
 
@@ -11,9 +10,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
 from numpy import where
-import scipy.io
-from scipy.stats import qmc
-import scipy.integrate as integrate
 from scipy.interpolate import griddata
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import warnings
